@@ -21,3 +21,25 @@ if (!$CI->db->table_exists(db_prefix() . 'siba_leads_meta')) {
 if (!get_option('siba_leads_repo_url')) {
     add_option('siba_leads_repo_url', SIBA_LEADS_REPOSITORY);
 }
+
+if (get_option('siba_leads_team_roles') === false || get_option('siba_leads_team_roles') === null || get_option('siba_leads_team_roles') === '') {
+    // Empty map — roles are picked in Siba Leads → Teams settings.
+    add_option('siba_leads_team_roles', json_encode([
+        'sales'   => 0,
+        'support' => 0,
+        'tech'    => 0,
+    ]));
+}
+
+if (get_option('siba_leads_auto_assign_sales') === false || get_option('siba_leads_auto_assign_sales') === '') {
+    add_option('siba_leads_auto_assign_sales', '1');
+}
+
+if (get_option('siba_leads_sales_rr_index') === false || get_option('siba_leads_sales_rr_index') === '') {
+    add_option('siba_leads_sales_rr_index', '0');
+}
+
+$CI->load->helper('siba_leads/siba_leads');
+if (function_exists('siba_leads_ensure_lead_columns')) {
+    siba_leads_ensure_lead_columns();
+}

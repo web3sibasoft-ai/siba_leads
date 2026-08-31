@@ -1,0 +1,6 @@
+name,email,phonenumber,company,status,source,address,city,country,description,tags
+لیـد تست ۱,test1.lead@example.com,09120000001,شرکت آلفا,New,Website,خیابان آزادی ۱,Tehran,IR,ورود تستی از CSV,"test,siba,sales"
+لیـد تست ۲,test2.lead@example.com,09120000002,شرکت بتا,New,Google,خیابان مطهری ۲,Tehran,IR,بررسی مسیر راندروبین,"test,import,roundrobin"
+لیـد تست ۳,test3.lead@example.com,09120000003,شرکت گاما,New,Instagram,خیابان شریعتی ۳,Mashhad,IR,تست وضعیت backlog در نبود تیم فروش,"test,backlog"
+Lead Test 4,test4.lead@example.com,09120000004,Delta LLC,New,Referral,123 Example St,Shiraz,IR,English row for encoding check,"test,utf8"
+Lead Test 5,test5.lead@example.com,09120000005,Epsilon Co,New,Other,456 Demo Ave,Tabriz,IR,Final verification row,"test,final"

@@ -1,0 +1,4 @@
+﻿name,title,company,description,country,zip,city,state,address,status,source,email,website,phonenumber,lead_value,lm_follow_up,tags
+"لید تست ۱",,"شرکت آلفا","تست واردسازی ۱",IR,,Tehran,,,,,lead.test.1@example.com,https://alpha.example.com,09120000001,,,"test,siba,sales"
+"لید تست ۲",,"شرکت بتا","تست واردسازی ۲",IR,,Shiraz,,,,,lead.test.2@example.com,https://beta.example.com,09120000002,,,"test,import,roundrobin"
+"Lead Test 3",,"Gamma LLC","Import smoke test 3",IR,,Tabriz,,,,,lead.test.3@example.com,https://gamma.example.com,09120000003,,,"test,backlog"
