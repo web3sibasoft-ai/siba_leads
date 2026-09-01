@@ -9,7 +9,7 @@ class Siba_leads extends AdminController
         parent::__construct();
 
         $method = $this->router->method;
-        if ($method !== 'validate_phone') {
+        if (!in_array($method, ['validate_phone', 'get_cities'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
@@ -253,5 +253,19 @@ class Siba_leads extends AdminController
         $exclude = (int) $this->input->post('lead_id');
         $dup     = siba_leads_phone_is_duplicate($this->input->post('phonenumber'), $exclude);
         echo json_encode(!$dup);
+    }
+
+    /**
+     * AJAX: cities for a province (used when siba_license is inactive).
+     */
+    public function get_cities()
+    {
+        $province_id = (int) $this->input->post('province_id');
+        $cities      = function_exists('siba_leads_get_active_cities')
+            ? siba_leads_get_active_cities($province_id)
+            : [];
+
+        header('Content-Type: application/json');
+        echo json_encode($cities);
     }
 }

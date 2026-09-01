@@ -527,11 +527,15 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 #lead-modal .modal-content {
     border: 0;
     border-radius: 18px;
-    overflow: hidden;
+    overflow: visible;
     box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
     background:
         radial-gradient(1200px 280px at 0% 0%, rgba(15, 118, 110, 0.08), transparent 55%),
         #fff;
+}
+
+#lead-modal .modal-body {
+    overflow: visible;
 }
 
 #lead-modal .modal-header {
@@ -749,6 +753,148 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border-color: #dbe4ee;
     min-height: 38px;
     box-shadow: none;
+}
+
+/* Status/source fields: undo Perfex select-placeholder skeleton on inline-add wrappers */
+#lead-modal .lead-edit .form-group-select-input-status,
+#lead-modal .lead-edit .form-group-select-input-source {
+    margin-bottom: 14px;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status.select-placeholder::after,
+#lead-modal .lead-edit .form-group-select-input-source.select-placeholder::after {
+    display: none !important;
+    content: none !important;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status.select-placeholder label,
+#lead-modal .lead-edit .form-group-select-input-source.select-placeholder label,
+#lead-modal .lead-edit .form-group-select-input-status label,
+#lead-modal .lead-edit .form-group-select-input-source label {
+    filter: none !important;
+    opacity: 1 !important;
+    margin-bottom: 6px;
+    display: block;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status.select-placeholder .input-group,
+#lead-modal .lead-edit .form-group-select-input-source.select-placeholder .input-group,
+#lead-modal .lead-edit .form-group-select-input-status .input-group,
+#lead-modal .lead-edit .form-group-select-input-source .input-group {
+    display: flex !important;
+    width: 100%;
+    align-items: stretch;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select,
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 1% !important;
+    max-width: 100%;
+    float: none;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .dropdown-toggle,
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select .dropdown-toggle {
+    width: 100%;
+    max-width: 100%;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .filter-option-inner-inner,
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select .filter-option-inner-inner {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status .input-group > select.selectpicker,
+#lead-modal .lead-edit .form-group-select-input-source .input-group > select.selectpicker {
+    display: none !important;
+}
+
+#lead-modal .lead-edit {
+    overflow: visible;
+}
+
+#lead-modal .lead-edit > .col-md-4 {
+    min-width: 0;
+    position: relative;
+}
+
+#lead-modal .lead-edit .form-group-select-input-assigned {
+    position: relative;
+}
+
+#lead-modal .lead-edit .input-group-select.open,
+#lead-modal .lead-edit .input-group-select .bootstrap-select.open {
+    z-index: 20;
+}
+
+#lead-modal .lead-edit .bootstrap-select.open > .dropdown-menu {
+    z-index: 1065;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province,
+#lead-modal .lead-edit .siba-lead-location-city {
+    position: relative;
+    z-index: 1;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .bootstrap-select,
+#lead-modal .lead-edit .siba-lead-location-city .bootstrap-select {
+    width: 100% !important;
+}
+
+#lead-modal .lead-edit .input-group-select {
+    width: 100%;
+    max-width: 100%;
+}
+
+#lead-modal .lead-edit .input-group-select .input-group {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+}
+
+#lead-modal .lead-edit .input-group-select .input-group > .bootstrap-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto !important;
+    float: none;
+}
+
+#lead-modal .lead-edit .input-group-select .input-group > .input-group-btn {
+    flex: 0 0 auto;
+    width: auto;
+    display: flex;
+}
+
+#lead-modal .lead-edit .input-group-select .bootstrap-select .btn,
+#lead-modal .lead-edit .input-group-select .input-group-btn > .btn {
+    min-height: 38px;
+    border-color: #dbe4ee;
+    box-shadow: none;
+    height: 100%;
+}
+
+#lead-modal .lead-edit .input-group-select .bootstrap-select .btn {
+    border-radius: 10px 0 0 10px !important;
+}
+
+#lead-modal .lead-edit .input-group-select .input-group-btn > .btn {
+    border-radius: 0 10px 10px 0 !important;
+    margin: 0;
+}
+
+[dir="rtl"] #lead-modal .lead-edit .input-group-select .bootstrap-select .btn,
+body.rtl #lead-modal .lead-edit .input-group-select .bootstrap-select .btn {
+    border-radius: 0 10px 10px 0 !important;
+}
+
+[dir="rtl"] #lead-modal .lead-edit .input-group-select .input-group-btn > .btn,
+body.rtl #lead-modal .lead-edit .input-group-select .input-group-btn > .btn {
+    border-radius: 10px 0 0 10px !important;
 }
 
 #lead-modal .lead-edit .form-control:focus {

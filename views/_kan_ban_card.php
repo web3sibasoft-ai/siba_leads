@@ -274,12 +274,20 @@ $hasMyActiveTask = $myActiveTasks > 0;
                     <dd><?= e($lead['address'] != '' ? $lead['address'] : '—'); ?></dd>
                 </div>
                 <div>
-                    <dt><?= _l('lead_city'); ?></dt>
-                    <dd><?= e($lead['city'] != '' ? $lead['city'] : '—'); ?></dd>
+                    <?php
+                    $leadLocation = function_exists('siba_leads_resolve_lead_location')
+                        ? siba_leads_resolve_lead_location($lead)
+                        : [
+                            'province_name' => $lead['state'] ?? '',
+                            'city_name'     => $lead['city'] ?? '',
+                        ];
+                    ?>
+                    <dt><?= _l('siba_leads_province'); ?></dt>
+                    <dd><?= e(($leadLocation['province_name'] ?? '') !== '' ? $leadLocation['province_name'] : '—'); ?></dd>
                 </div>
                 <div>
-                    <dt><?= _l('lead_state'); ?></dt>
-                    <dd><?= e($lead['state'] != '' ? $lead['state'] : '—'); ?></dd>
+                    <dt><?= _l('siba_leads_city'); ?></dt>
+                    <dd><?= e(($leadLocation['city_name'] ?? '') !== '' ? $leadLocation['city_name'] : '—'); ?></dd>
                 </div>
                 <div>
                     <dt><?= _l('lead_country'); ?></dt>

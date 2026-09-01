@@ -25,8 +25,13 @@ hooks()->add_filter('module_' . SIBA_LEADS_MODULE_NAME . '_action_links', 'siba_
 hooks()->add_filter('sidebar_menu_items', 'siba_leads_ensure_leads_menu_children', 1000);
 hooks()->add_filter('setup_menu_items', 'siba_leads_ensure_setup_teams_menu', 1000);
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_before_lead_added');
+hooks()->add_filter('before_lead_added', 'siba_leads_filter_lead_location_fields', 20);
 hooks()->add_action('lead_created', 'siba_leads_action_lead_created');
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_before_email_lead');
+hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_lead_location_fields', 20);
+hooks()->add_action('pre_admin_init', 'siba_leads_intercept_lead_location_post', 1);
+hooks()->add_action('after_lead_updated', 'siba_leads_persist_location_on_save');
+hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location_seed');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
 hooks()->add_filter('not_importable_leads_fields', 'siba_leads_not_importable_leads_fields');
@@ -228,7 +233,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260819d') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260901g') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -240,10 +245,25 @@ function siba_leads_load_admin_js()
         'whatsapp_enable'  => 'Whatsapp Enable',
     ];
 
+    $CI = &get_instance();
+    $provinces = function_exists('siba_leads_get_active_provinces') ? siba_leads_get_active_provinces() : [];
+    $citiesUrl = admin_url('siba_leads/get_cities');
+
     echo '<script>window.sibaLeadsHideLeadFields = ' . json_encode($hideFields, JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMarkPaidConfirm = ' . json_encode(_l('siba_leads_card_mark_paid_confirm'), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsDuplicatePhone = ' . json_encode(_l('siba_leads_duplicate_phone'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260822a') . '"></script>';
+    echo '<script>window.sibaLeadsProvinces = ' . json_encode($provinces, JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsCitiesUrl = ' . json_encode($citiesUrl) . ';</script>';
+    echo '<script>window.sibaLeadsLocationLabels = ' . json_encode([
+        'province' => _l('siba_leads_province'),
+        'city'     => _l('siba_leads_city'),
+        'select'   => _l('dropdown_non_selected_tex'),
+        'loading'  => _l('siba_leads_city_loading'),
+        'pickProvinceFirst' => _l('siba_leads_pick_province_first'),
+    ], JSON_UNESCAPED_UNICODE) . ';</script>';
+    $defaultCountryId = function_exists('siba_leads_default_country_id') ? siba_leads_default_country_id() : 0;
+    echo '<script>window.sibaLeadsDefaultCountryId = ' . (int) $defaultCountryId . ';</script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260901h') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

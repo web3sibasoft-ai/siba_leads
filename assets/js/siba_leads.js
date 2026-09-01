@@ -206,6 +206,404 @@
         });
     }
 
+    function getLocationLabels() {
+        return window.sibaLeadsLocationLabels || {
+            province: 'Province',
+            city: 'City',
+            select: 'Select',
+            loading: 'Loading...',
+            pickProvinceFirst: 'Select province first'
+        };
+    }
+
+    function buildProvinceOptions(selectedId) {
+        var labels = getLocationLabels();
+        var provinces = window.sibaLeadsProvinces || [];
+        var opts = '<option value="">' + labels.select + '</option>';
+        $.each(provinces, function (i, province) {
+            var id = String(province.province_id);
+            opts += '<option value="' + id + '"' + (String(selectedId) === id ? ' selected' : '') + '>' + province.province_name + '</option>';
+        });
+        return opts;
+    }
+
+    function buildCityOptions(cities, selectedId) {
+        var labels = getLocationLabels();
+        var opts = '<option value="">' + labels.select + '</option>';
+        $.each(cities || [], function (i, city) {
+            var id = String(city.city_id);
+            opts += '<option value="' + id + '"' + (String(selectedId) === id ? ' selected' : '') + '>' + city.city_name + '</option>';
+        });
+        return opts;
+    }
+
+    function getLeadEditPanel($modal) {
+        var $panels = $modal.find('.lead-edit');
+        if ($panels.length <= 1) {
+            return $panels.first();
+        }
+
+        return $panels.filter(function () {
+            return $(this).find('select[name="status"], select#status').length > 0;
+        }).first();
+    }
+
+    function isLeadEditPanelOpen($modal) {
+        var $panel = getLeadEditPanel($modal);
+        return $panel.length > 0 && !$panel.hasClass('hide');
+    }
+
+    function isEditingExistingLead($modal) {
+        return !!String($modal.find('input[name="leadid"]').val() || '').trim();
+    }
+
+    function canInitLeadLocationFields($modal) {
+        return !isEditingExistingLead($modal) || isLeadEditPanelOpen($modal);
+    }
+
+    function isRtlUi() {
+        return (typeof isRTL !== 'undefined' && (isRTL === true || isRTL === 'true'))
+            || document.documentElement.getAttribute('dir') === 'rtl'
+            || document.body.classList.contains('rtl');
+    }
+
+    function mountLocationSelectpicker($select) {
+        if (!$select || !$select.length) {
+            return;
+        }
+
+        if ($select.parent().hasClass('bootstrap-select')) {
+            $select.selectpicker('refresh');
+            return;
+        }
+
+        $select.selectpicker({
+            showSubtext: true,
+            width: $select.data('width') || '100%'
+        });
+    }
+
+    function fixLeadModalStatusSourceFields($modal) {
+        $modal.find('.form-group-select-input-status, .form-group-select-input-source').each(function () {
+            var $wrap = $(this);
+            $wrap.removeClass('select-placeholder');
+
+            var $select = $wrap.find('select.selectpicker').first();
+            if (!$select.length) {
+                return;
+            }
+
+            if (!$select.parent().hasClass('bootstrap-select')) {
+                $select.selectpicker({
+                    showSubtext: true,
+                    width: '100%'
+                });
+                return;
+            }
+
+            $select.selectpicker('refresh');
+        });
+    }
+
+    function bindLeadLocationFieldEvents($modal, $provinceSelect, $citySelect) {
+        $provinceSelect.off('.sibaLocation');
+        $citySelect.off('.sibaLocation');
+
+        $provinceSelect.on('changed.bs.select.sibaLocation', function () {
+            var provinceId = $(this).val();
+            loadLeadCities(provinceId, '', $citySelect).always(function () {
+                syncLeadLocationHiddenFields($modal);
+                updateLeadLocationView(
+                    $modal,
+                    $provinceSelect.find('option:selected').text(),
+                    ''
+                );
+            });
+        });
+
+        $citySelect.on('changed.bs.select.sibaLocation', function () {
+            syncLeadLocationHiddenFields($modal);
+            updateLeadLocationView(
+                $modal,
+                $provinceSelect.find('option:selected').text(),
+                $citySelect.find('option:selected').text()
+            );
+        });
+    }
+
+    function ensureLocationHiddenInputs($form) {
+        var $stateHidden = $form.find('input[type="hidden"][data-siba-location-sync="state"]');
+        var $cityHidden = $form.find('input[type="hidden"][data-siba-location-sync="city"]');
+
+        if (!$stateHidden.length) {
+            $stateHidden = $('<input>', {
+                type: 'hidden',
+                name: 'state',
+                'data-siba-location-sync': 'state'
+            }).appendTo($form);
+        }
+
+        if (!$cityHidden.length) {
+            $cityHidden = $('<input>', {
+                type: 'hidden',
+                name: 'city',
+                'data-siba-location-sync': 'city'
+            }).appendTo($form);
+        }
+
+        return {
+            state: $stateHidden,
+            city: $cityHidden
+        };
+    }
+
+    function syncLeadLocationHiddenFields($scope) {
+        var $form = $scope.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        var $province = $form.find('#siba_lead_province_id');
+        var $city = $form.find('#siba_lead_city_id');
+        if (!$province.length || !$city.length) {
+            return;
+        }
+
+        var provinceName = $province.find('option:selected').text() || '';
+        var cityName = $city.find('option:selected').text() || '';
+        if ($province.val() === '') {
+            provinceName = '';
+        }
+        if ($city.val() === '') {
+            cityName = '';
+        }
+
+        var hidden = ensureLocationHiddenInputs($form);
+        hidden.state.val(provinceName);
+        hidden.city.val(cityName);
+    }
+
+    function refreshLeadLocationPickers($modal) {
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return $.Deferred().resolve().promise();
+        }
+
+        var $province = $form.find('#siba_lead_province_id');
+        var $city = $form.find('#siba_lead_city_id');
+        if (!$province.length || !$city.length) {
+            return $.Deferred().resolve().promise();
+        }
+
+        var seed = window.sibaLeadLocationSeed || null;
+        var provinceId = String($province.val() || '');
+        var cityId = String($city.val() || '');
+
+        if (!provinceId && seed && seed.province_id) {
+            provinceId = String(seed.province_id);
+        }
+        if (!cityId && seed && seed.city_id) {
+            cityId = String(seed.city_id);
+        }
+
+        if (provinceId) {
+            $province.selectpicker('val', provinceId);
+        }
+        mountLocationSelectpicker($province);
+
+        if (!provinceId) {
+            mountLocationSelectpicker($city);
+            syncLeadLocationHiddenFields($modal);
+            return $.Deferred().resolve().promise();
+        }
+
+        return loadLeadCities(provinceId, cityId, $city).always(function () {
+            syncLeadLocationHiddenFields($modal);
+            mountLocationSelectpicker($province);
+            mountLocationSelectpicker($city);
+        });
+    }
+
+    function loadLeadCities(provinceId, selectedCityId, $citySelect) {
+        var labels = getLocationLabels();
+        var citiesUrl = window.sibaLeadsCitiesUrl || (admin_url + 'siba_leads/get_cities');
+
+        $citySelect.html('<option value="">' + labels.loading + '</option>').selectpicker('refresh');
+
+        if (!provinceId) {
+            $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>').selectpicker('refresh');
+            return $.Deferred().resolve().promise();
+        }
+
+        return $.ajax({
+            url: citiesUrl,
+            type: 'POST',
+            data: { province_id: provinceId },
+            dataType: 'json'
+        }).done(function (cities) {
+            $citySelect.html(buildCityOptions(cities, selectedCityId)).selectpicker('refresh');
+        }).fail(function () {
+            $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>').selectpicker('refresh');
+        });
+    }
+
+    function updateLeadLocationView($modal, provinceName, cityName) {
+        var labels = getLocationLabels();
+        var $col = $modal.find('.lead-information-col').first();
+        var $addressDt = $col.find('dt.lead-field-heading').filter(function () {
+            var text = normalizeLabel($(this).text());
+            return text.indexOf('address') !== -1 || text.indexOf('آدرس') !== -1;
+        }).first();
+
+        if (!$addressDt.length) {
+            return;
+        }
+
+        var $cityDt = $addressDt.next('dd').next('dt.lead-field-heading');
+        var $stateDt = $cityDt.next('dd').next('dt.lead-field-heading');
+
+        if ($cityDt.length) {
+            $cityDt.text(labels.city);
+            $cityDt.next('dd').text(cityName || '—');
+        }
+        if ($stateDt.length) {
+            $stateDt.text(labels.province);
+            $stateDt.next('dd').text(provinceName || '—');
+        }
+    }
+
+    function replaceLeadLocationFields($modal) {
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        if (!canInitLeadLocationFields($modal)) {
+            return;
+        }
+
+        if ($form.find('#siba_lead_province_id').length) {
+            if (!$form.data('sibaLocationReady')) {
+                $form.data('sibaLocationReady', true);
+            }
+            refreshLeadLocationPickers($modal);
+            return;
+        }
+
+        if ($form.data('sibaLocationPending')) {
+            return;
+        }
+        $form.data('sibaLocationPending', true);
+
+        var labels = getLocationLabels();
+        var seed = window.sibaLeadLocationSeed || null;
+        var $cityInput = $form.find('input[name="city"]');
+        var $stateInput = $form.find('input[name="state"]');
+
+        if (!$cityInput.length && !$stateInput.length) {
+            $form.removeData('sibaLocationPending');
+            return;
+        }
+
+        var selectedProvince = seed ? String(seed.province_id || '') : '';
+        var selectedCity = seed ? String(seed.city_id || '') : '';
+
+        $cityInput.closest('.form-group').addClass('siba-hide-lead-field').hide();
+        $stateInput.closest('.form-group').addClass('siba-hide-lead-field').hide();
+        $cityInput.prop('disabled', true).removeAttr('name').removeAttr('id');
+        $stateInput.prop('disabled', true).removeAttr('name').removeAttr('id');
+        ensureLocationHiddenInputs($form);
+
+        var $provinceGroup = $('<div class="form-group siba-lead-location-province"></div>');
+        $provinceGroup.append('<label class="control-label">' + labels.province + '</label>');
+        var $provinceSelect = $('<select>', {
+            id: 'siba_lead_province_id',
+            name: 'province_id',
+            class: 'form-control selectpicker',
+            'data-none-selected-text': labels.select
+        });
+        $provinceSelect.html(buildProvinceOptions(selectedProvince));
+        $provinceGroup.append($provinceSelect);
+
+        var $cityGroup = $('<div class="form-group siba-lead-location-city"></div>');
+        $cityGroup.append('<label class="control-label">' + labels.city + '</label>');
+        var $citySelect = $('<select>', {
+            id: 'siba_lead_city_id',
+            name: 'city_id',
+            class: 'form-control selectpicker',
+            'data-none-selected-text': labels.select
+        });
+        $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>');
+        $cityGroup.append($citySelect);
+
+        if ($stateInput.length) {
+            $provinceGroup.insertAfter($stateInput.closest('.form-group'));
+        } else if ($cityInput.length) {
+            $provinceGroup.insertBefore($cityInput.closest('.form-group'));
+        } else {
+            $form.find('.col-md-6').last().append($provinceGroup);
+        }
+        $cityGroup.insertAfter($provinceGroup);
+
+        mountLocationSelectpicker($provinceSelect);
+        mountLocationSelectpicker($citySelect);
+        bindLeadLocationFieldEvents($modal, $provinceSelect, $citySelect);
+
+        $form.off('submit.sibaLocation').on('submit.sibaLocation', function () {
+            syncLeadLocationHiddenFields($modal);
+        });
+
+        if (selectedProvince) {
+            loadLeadCities(selectedProvince, selectedCity, $citySelect).always(function () {
+                syncLeadLocationHiddenFields($modal);
+                updateLeadLocationView(
+                    $modal,
+                    seed && seed.province_name ? seed.province_name : $provinceSelect.find('option:selected').text(),
+                    seed && seed.city_name ? seed.city_name : $citySelect.find('option:selected').text()
+                );
+            });
+        } else {
+            syncLeadLocationHiddenFields($modal);
+            updateLeadLocationView(
+                $modal,
+                seed && seed.province_name ? seed.province_name : '',
+                seed && seed.city_name ? seed.city_name : ''
+            );
+        }
+
+        $form.data('sibaLocationReady', true);
+        $form.removeData('sibaLocationPending');
+    }
+
+    function shouldApplyDefaultCountry() {
+        return $('.siba-leads-kan-ban').length > 0
+            && window.sibaLeadsDefaultCountryId > 0;
+    }
+
+    function applyDefaultCountry($modal) {
+        if (!shouldApplyDefaultCountry()) {
+            return;
+        }
+
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        var leadId = $form.find('input[name="leadid"]').val();
+        if (leadId) {
+            return;
+        }
+
+        var $country = $form.find('select[name="country"], #country');
+        if (!$country.length) {
+            return;
+        }
+
+        $country.selectpicker('val', String(window.sibaLeadsDefaultCountryId));
+        $country.selectpicker('refresh');
+    }
+
     function hideEmptyProfileDashes($modal) {
         $modal.find('.lead-view dd').each(function () {
             var $dd = $(this);
@@ -235,6 +633,9 @@
 
         $modal.addClass('siba-lead-modal-ready');
         hideLeadProfileFields($modal);
+        fixLeadModalStatusSourceFields($modal);
+        replaceLeadLocationFields($modal);
+        applyDefaultCountry($modal);
         hideEmptyProfileDashes($modal);
         bindLeadPhoneUnique($modal);
 
@@ -283,7 +684,17 @@
     });
 
     $(document).on('click', '#lead-modal [lead-edit]', function () {
-        setTimeout(enhanceLeadModal, 30);
+        setTimeout(function () {
+            var $modal = $('#lead-modal');
+            if (!isLeadEditPanelOpen($modal)) {
+                return;
+            }
+            enhanceLeadModal();
+        }, 100);
+    });
+
+    $(document).on('hidden.bs.modal', '#lead-modal', function () {
+        window.sibaLeadLocationSeed = null;
     });
 
     function isLeadRelatedTask($scope) {
@@ -418,5 +829,87 @@
                 applyLeadAssigneeToNewTask($('#_task_modal'));
             }, 150);
         }
+    });
+
+    function syncLeadFormBeforeSave($modal) {
+        $modal = $modal && $modal.length ? $modal : $('#lead-modal');
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        $form.find('select.selectpicker').each(function () {
+            var $select = $(this);
+            if (!$select.parent().hasClass('bootstrap-select')) {
+                return;
+            }
+            var val = $select.selectpicker('val');
+            if (val === null || val === undefined) {
+                return;
+            }
+            $select.val(val);
+        });
+
+        syncLeadLocationHiddenFields($modal);
+
+        $form.find('#siba_lead_province_id, #siba_lead_city_id').each(function () {
+            var $select = $(this);
+            var val = $select.parent().hasClass('bootstrap-select')
+                ? $select.selectpicker('val')
+                : $select.val();
+            $select.prop('disabled', false).val(val || '');
+        });
+    }
+
+    function bindSibaLeadFormSaveSync() {
+        if (window.sibaLeadsFormSaveBound || typeof window.lead_profile_form_handler !== 'function') {
+            return;
+        }
+
+        window.sibaLeadsFormSaveBound = true;
+        var coreHandler = window.lead_profile_form_handler;
+
+        window.lead_profile_form_handler = function (form) {
+            syncLeadFormBeforeSave($('#lead-modal'));
+            return coreHandler(form);
+        };
+    }
+
+    function bindSibaKanbanRefreshOverride() {
+        if (window.sibaLeadsKanbanOverrideBound || typeof window.leads_kanban !== 'function') {
+            return;
+        }
+
+        window.sibaLeadsKanbanOverrideBound = true;
+        var coreKanban = window.leads_kanban;
+
+        window.leads_kanban = function () {
+            if ($('.siba-leads-kan-ban').length && typeof window.siba_leads_kanban === 'function') {
+                window.siba_leads_kanban();
+                return;
+            }
+
+            return coreKanban.apply(this, arguments);
+        };
+    }
+
+    $(function () {
+        bindSibaKanbanRefreshOverride();
+
+        if (typeof window.lead_profile_form_handler === 'function') {
+            bindSibaLeadFormSaveSync();
+            return;
+        }
+
+        var attempts = 0;
+        var waitForLeadHandler = window.setInterval(function () {
+            attempts += 1;
+            if (typeof window.lead_profile_form_handler === 'function') {
+                window.clearInterval(waitForLeadHandler);
+                bindSibaLeadFormSaveSync();
+            } else if (attempts > 30) {
+                window.clearInterval(waitForLeadHandler);
+            }
+        }, 100);
     });
 })();
