@@ -250,7 +250,7 @@ class Siba_leads extends AdminController
             show_404();
         }
 
-        $exclude = (int) $this->input->post('lead_id');
+        $exclude = siba_leads_resolve_lead_exclude_id_from_request();
         $dup     = siba_leads_phone_is_duplicate($this->input->post('phonenumber'), $exclude);
         echo json_encode(!$dup);
     }
@@ -260,12 +260,13 @@ class Siba_leads extends AdminController
      */
     public function get_cities()
     {
-        $province_id = (int) $this->input->post('province_id');
+        $province_id = (int) ($this->input->post('province_id') ?: $this->input->get('province_id'));
         $cities      = function_exists('siba_leads_get_active_cities')
             ? siba_leads_get_active_cities($province_id)
             : [];
 
-        header('Content-Type: application/json');
-        echo json_encode($cities);
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode($cities, JSON_UNESCAPED_UNICODE));
     }
 }

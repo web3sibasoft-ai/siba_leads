@@ -6,6 +6,7 @@ require_once __DIR__ . '/siba_leads_teams_helper.php';
 require_once __DIR__ . '/siba_leads_assignment_helper.php';
 require_once __DIR__ . '/siba_leads_phone_helper.php';
 require_once __DIR__ . '/siba_leads_location_helper.php';
+require_once __DIR__ . '/siba_leads_profile_helper.php';
 
 /**
  * Can the current staff see every lead on the Siba kanban?
@@ -146,6 +147,14 @@ function siba_leads_ensure_lead_columns(): void
 
     if (function_exists('siba_leads_location_columns')) {
         foreach (siba_leads_location_columns() as $column => $definition) {
+            if (!$CI->db->field_exists($column, $table)) {
+                $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
+            }
+        }
+    }
+
+    if (function_exists('siba_leads_profile_columns')) {
+        foreach (siba_leads_profile_columns() as $column => $definition) {
             if (!$CI->db->field_exists($column, $table)) {
                 $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
             }

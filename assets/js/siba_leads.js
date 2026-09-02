@@ -177,6 +177,13 @@
         // Whatsapp Enable custom field (and any configured hide labels).
         $modal.find('.form-group').each(function () {
             var $group = $(this);
+            if ($group.hasClass('siba-lead-location-province')
+                || $group.hasClass('siba-lead-location-city')
+                || $group.hasClass('siba-lead-profile-position')
+                || $group.hasClass('siba-lead-profile-job-group')
+                || $group.hasClass('siba-lead-profile-national-code')) {
+                return;
+            }
             var labelText = normalizeLabel($group.find('label.control-label, label').first().text().replace('*', ''));
             if (!labelText) {
                 return;
@@ -267,20 +274,206 @@
             || document.body.classList.contains('rtl');
     }
 
+    function getSelectpickerValue($select) {
+        if (!$select || !$select.length) {
+            return '';
+        }
+
+        if ($select.parent().hasClass('bootstrap-select')) {
+            var val = $select.selectpicker('val');
+            if (Array.isArray(val)) {
+                val = val[0] || '';
+            }
+            return String(val || '');
+        }
+
+        return String($select.val() || '');
+    }
+
+    function destroyLocationSelectpicker($select) {
+        if (!$select || !$select.length || !$select.parent().hasClass('bootstrap-select')) {
+            return;
+        }
+
+        try {
+            $select.selectpicker('destroy');
+        } catch (e) {
+            // Ignore teardown errors on stale nodes.
+        }
+    }
+
+    function cleanupLocationPickerArtifacts() {
+        $('body > .bs-container').remove();
+        $('#lead-modal .siba-lead-location-province .bootstrap-select.open, #lead-modal .siba-lead-location-city .bootstrap-select.open')
+            .removeClass('open')
+            .find('.dropdown-menu')
+            .removeClass('show');
+    }
+
+    function closeLocationPickerIfOpen($select) {
+        if (!$select || !$select.length || !$select.parent().hasClass('bootstrap-select')) {
+            return;
+        }
+
+        if ($select.parent().hasClass('open')) {
+            $select.selectpicker('toggle');
+        }
+    }
+
+    function enableLeadModalSelectpicker($select) {
+        if (!$select || !$select.length) {
+            return;
+        }
+
+        $select.prop('disabled', false).removeAttr('disabled');
+
+        var $wrap = $select.parent('.bootstrap-select');
+        if (!$wrap.length) {
+            return;
+        }
+
+        $wrap.removeClass('disabled');
+        $wrap.find('button.dropdown-toggle')
+            .prop('disabled', false)
+            .removeAttr('disabled')
+            .removeClass('disabled')
+            .attr('aria-disabled', 'false');
+        $select.selectpicker('refresh');
+    }
+
     function mountLocationSelectpicker($select) {
         if (!$select || !$select.length) {
             return;
         }
 
+        $select.prop('disabled', false).removeAttr('disabled');
+
         if ($select.parent().hasClass('bootstrap-select')) {
-            $select.selectpicker('refresh');
+            enableLeadModalSelectpicker($select);
             return;
         }
 
+        cleanupLocationPickerArtifacts();
+
         $select.selectpicker({
             showSubtext: true,
-            width: $select.data('width') || '100%'
+            width: $select.data('width') || '100%',
+            dropupAuto: false
         });
+        enableLeadModalSelectpicker($select);
+    }
+
+    function ensureLeadModalSelectsEnabled($modal) {
+        if (!$modal || !$modal.length) {
+            return;
+        }
+
+        if (isEditingExistingLead($modal) && !isLeadEditPanelOpen($modal)) {
+            return;
+        }
+
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        if (!$modal.find('.lead-save-btn').length) {
+            return;
+        }
+
+        $form.find([
+            '#siba_lead_province_id',
+            '#siba_lead_city_id',
+            '#siba_lead_position_id',
+            '#siba_lead_job_group_id'
+        ].join(', ')).each(function () {
+            enableLeadModalSelectpicker($(this));
+        });
+    }
+
+    function citiesDatasetReady() {
+        return typeof window.sibaLeadsCitiesByProvince !== 'undefined'
+            && window.sibaLeadsCitiesByProvince !== null
+            && !Array.isArray(window.sibaLeadsCitiesByProvince);
+    }
+
+    function getCitiesForProvince(provinceId) {
+        if (!citiesDatasetReady() || !provinceId) {
+            return null;
+        }
+
+        var grouped = window.sibaLeadsCitiesByProvince;
+        var key = String(provinceId);
+        if (Object.prototype.hasOwnProperty.call(grouped, key)) {
+            return grouped[key];
+        }
+        if (Object.prototype.hasOwnProperty.call(grouped, provinceId)) {
+            return grouped[provinceId];
+        }
+
+        return [];
+    }
+
+    function renderLeadCityOptions($citySelect, cities, selectedCityId) {
+        closeLocationPickerIfOpen($citySelect);
+        $citySelect.prop('disabled', false).removeAttr('disabled');
+        $citySelect.html(buildCityOptions(normalizeCityRows(cities), selectedCityId));
+
+        if ($citySelect.parent().hasClass('bootstrap-select')) {
+            if (selectedCityId) {
+                $citySelect.selectpicker('val', String(selectedCityId));
+            }
+            enableLeadModalSelectpicker($citySelect);
+            return;
+        }
+
+        mountLocationSelectpicker($citySelect);
+        if (selectedCityId) {
+            $citySelect.selectpicker('val', String(selectedCityId));
+            enableLeadModalSelectpicker($citySelect);
+        }
+    }
+
+    function normalizeCityRows(rows) {
+        if (!Array.isArray(rows)) {
+            return [];
+        }
+
+        return rows.filter(function (row) {
+            return row
+                && row.city_id !== null
+                && row.city_id !== undefined
+                && String(row.city_id) !== ''
+                && row.city_name;
+        });
+    }
+
+    function hideLeadCountryField($form) {
+        if (!$form || !$form.length || $form.find('input[data-siba-default-country]').length) {
+            return;
+        }
+
+        var $country = $form.find('select[name="country"], #country').first();
+        if (!$country.length) {
+            return;
+        }
+
+        var countryId = getSelectpickerValue($country) || $country.val() || '';
+        if (!countryId && window.sibaLeadsDefaultCountryId) {
+            countryId = String(window.sibaLeadsDefaultCountryId);
+        }
+
+        destroyLocationSelectpicker($country);
+
+        $('<input>', {
+            type: 'hidden',
+            name: 'country',
+            value: countryId,
+            'data-siba-default-country': '1'
+        }).appendTo($form);
+
+        $country.prop('disabled', true).removeAttr('name').removeAttr('id');
+        $country.closest('.form-group').addClass('siba-hide-lead-field').hide();
     }
 
     function fixLeadModalStatusSourceFields($modal) {
@@ -309,8 +502,8 @@
         $provinceSelect.off('.sibaLocation');
         $citySelect.off('.sibaLocation');
 
-        $provinceSelect.on('changed.bs.select.sibaLocation', function () {
-            var provinceId = $(this).val();
+        function onProvinceChanged() {
+            var provinceId = getSelectpickerValue($provinceSelect);
             loadLeadCities(provinceId, '', $citySelect).always(function () {
                 syncLeadLocationHiddenFields($modal);
                 updateLeadLocationView(
@@ -319,6 +512,12 @@
                     ''
                 );
             });
+        }
+
+        $provinceSelect.on('changed.bs.select.sibaLocation', onProvinceChanged);
+        $provinceSelect.on('change.sibaLocation', onProvinceChanged);
+        $provinceSelect.on('show.bs.select.sibaLocation', function () {
+            closeLocationPickerIfOpen($citySelect);
         });
 
         $citySelect.on('changed.bs.select.sibaLocation', function () {
@@ -328,6 +527,9 @@
                 $provinceSelect.find('option:selected').text(),
                 $citySelect.find('option:selected').text()
             );
+        });
+        $citySelect.on('show.bs.select.sibaLocation', function () {
+            closeLocationPickerIfOpen($provinceSelect);
         });
     }
 
@@ -371,10 +573,10 @@
 
         var provinceName = $province.find('option:selected').text() || '';
         var cityName = $city.find('option:selected').text() || '';
-        if ($province.val() === '') {
+        if (getSelectpickerValue($province) === '') {
             provinceName = '';
         }
-        if ($city.val() === '') {
+        if (getSelectpickerValue($city) === '') {
             cityName = '';
         }
 
@@ -396,8 +598,8 @@
         }
 
         var seed = window.sibaLeadLocationSeed || null;
-        var provinceId = String($province.val() || '');
-        var cityId = String($city.val() || '');
+        var provinceId = getSelectpickerValue($province);
+        var cityId = getSelectpickerValue($city);
 
         if (!provinceId && seed && seed.province_id) {
             provinceId = String(seed.province_id);
@@ -407,44 +609,68 @@
         }
 
         if (provinceId) {
+            mountLocationSelectpicker($province);
             $province.selectpicker('val', provinceId);
+            enableLeadModalSelectpicker($province);
+        } else {
+            mountLocationSelectpicker($province);
         }
-        mountLocationSelectpicker($province);
 
         if (!provinceId) {
             mountLocationSelectpicker($city);
+            enableLeadModalSelectpicker($city);
             syncLeadLocationHiddenFields($modal);
             return $.Deferred().resolve().promise();
         }
 
         return loadLeadCities(provinceId, cityId, $city).always(function () {
             syncLeadLocationHiddenFields($modal);
-            mountLocationSelectpicker($province);
-            mountLocationSelectpicker($city);
+            enableLeadModalSelectpicker($city);
+            enableLeadModalSelectpicker($province);
         });
     }
 
     function loadLeadCities(provinceId, selectedCityId, $citySelect) {
         var labels = getLocationLabels();
         var citiesUrl = window.sibaLeadsCitiesUrl || (admin_url + 'siba_leads/get_cities');
-
-        $citySelect.html('<option value="">' + labels.loading + '</option>').selectpicker('refresh');
+        provinceId = String(provinceId || '');
+        var deferred = $.Deferred();
 
         if (!provinceId) {
-            $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>').selectpicker('refresh');
-            return $.Deferred().resolve().promise();
+            renderLeadCityOptions($citySelect, [], '');
+            deferred.resolve();
+            return deferred.promise();
         }
 
-        return $.ajax({
+        var localCities = getCitiesForProvince(provinceId);
+        if (localCities !== null) {
+            renderLeadCityOptions($citySelect, localCities, selectedCityId);
+            deferred.resolve(localCities);
+            return deferred.promise();
+        }
+
+        if ($citySelect.parent().hasClass('bootstrap-select')) {
+            $citySelect.html('<option value="">' + labels.loading + '</option>');
+            $citySelect.selectpicker('refresh');
+        } else {
+            $citySelect.html('<option value="">' + labels.loading + '</option>');
+            mountLocationSelectpicker($citySelect);
+        }
+
+        $.ajax({
             url: citiesUrl,
             type: 'POST',
             data: { province_id: provinceId },
             dataType: 'json'
         }).done(function (cities) {
-            $citySelect.html(buildCityOptions(cities, selectedCityId)).selectpicker('refresh');
+            renderLeadCityOptions($citySelect, cities, selectedCityId);
+            deferred.resolve(cities);
         }).fail(function () {
-            $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>').selectpicker('refresh');
+            renderLeadCityOptions($citySelect, [], '');
+            deferred.reject();
         });
+
+        return deferred.promise();
     }
 
     function updateLeadLocationView($modal, provinceName, cityName) {
@@ -486,6 +712,12 @@
             if (!$form.data('sibaLocationReady')) {
                 $form.data('sibaLocationReady', true);
             }
+            hideLeadCountryField($form);
+            bindLeadLocationFieldEvents(
+                $modal,
+                $form.find('#siba_lead_province_id'),
+                $form.find('#siba_lead_city_id')
+            );
             refreshLeadLocationPickers($modal);
             return;
         }
@@ -507,9 +739,10 @@
 
         var selectedProvince = seed ? String(seed.province_id || '') : '';
         var selectedCity = seed ? String(seed.city_id || '') : '';
+        var $legacyCityGroup = $cityInput.closest('.form-group');
+        var $legacyStateGroup = $stateInput.closest('.form-group');
+        var $addressGroup = $form.find('#address, textarea[name="address"]').first().closest('.form-group');
 
-        $cityInput.closest('.form-group').addClass('siba-hide-lead-field').hide();
-        $stateInput.closest('.form-group').addClass('siba-hide-lead-field').hide();
         $cityInput.prop('disabled', true).removeAttr('name').removeAttr('id');
         $stateInput.prop('disabled', true).removeAttr('name').removeAttr('id');
         ensureLocationHiddenInputs($form);
@@ -536,17 +769,28 @@
         $citySelect.html('<option value="">' + labels.pickProvinceFirst + '</option>');
         $cityGroup.append($citySelect);
 
-        if ($stateInput.length) {
-            $provinceGroup.insertAfter($stateInput.closest('.form-group'));
-        } else if ($cityInput.length) {
-            $provinceGroup.insertBefore($cityInput.closest('.form-group'));
+        if ($legacyStateGroup.length) {
+            $provinceGroup.insertAfter($legacyStateGroup);
+        } else if ($legacyCityGroup.length) {
+            $provinceGroup.insertBefore($legacyCityGroup);
+        } else if ($addressGroup.length) {
+            $provinceGroup.insertAfter($addressGroup);
         } else {
             $form.find('.col-md-6').last().append($provinceGroup);
         }
         $cityGroup.insertAfter($provinceGroup);
 
+        $legacyCityGroup.remove();
+        $legacyStateGroup.remove();
+        hideLeadCountryField($form);
+
         mountLocationSelectpicker($provinceSelect);
         mountLocationSelectpicker($citySelect);
+        if (selectedProvince) {
+            $provinceSelect.selectpicker('val', selectedProvince);
+            enableLeadModalSelectpicker($provinceSelect);
+        }
+        enableLeadModalSelectpicker($citySelect);
         bindLeadLocationFieldEvents($modal, $provinceSelect, $citySelect);
 
         $form.off('submit.sibaLocation').on('submit.sibaLocation', function () {
@@ -575,6 +819,234 @@
         $form.removeData('sibaLocationPending');
     }
 
+    function getProfileLabels() {
+        return window.sibaLeadsProfileLabels || {
+            nationalCode: 'National ID',
+            position: 'Position',
+            jobGroup: 'Job group',
+            select: 'Select'
+        };
+    }
+
+    function buildJobGroupOptions(selectedId) {
+        var labels = getProfileLabels();
+        var groups = window.sibaLeadJobGroups || [];
+        var opts = '<option value="">' + labels.select + '</option>';
+        $.each(groups, function (i, group) {
+            var id = String(group.siba_job_group_id);
+            opts += '<option value="' + id + '"' + (String(selectedId) === id ? ' selected' : '') + '>' + group.siba_job_group_name + '</option>';
+        });
+        return opts;
+    }
+
+    function buildPositionOptions(selectedId) {
+        var labels = getProfileLabels();
+        var positions = window.sibaLeadPositions || [];
+        var opts = '<option value="">' + labels.select + '</option>';
+        $.each(positions, function (i, position) {
+            var id = String(position.siba_position_id);
+            opts += '<option value="' + id + '"' + (String(selectedId) === id ? ' selected' : '') + '>' + position.siba_position_name + '</option>';
+        });
+        return opts;
+    }
+
+    function syncLeadProfileTitle($form) {
+        var $position = $form.find('#siba_lead_position_id');
+        var $title = $form.find('input[name="title"]');
+        if (!$position.length || !$title.length) {
+            return;
+        }
+
+        var positionName = $position.find('option:selected').text() || '';
+        if ($position.val() && positionName && positionName !== getProfileLabels().select) {
+            $title.val(positionName);
+        }
+    }
+
+    function updateLeadProfileView($modal) {
+        var labels = getProfileLabels();
+        var seed = window.sibaLeadProfileSeed || null;
+        var $col = $modal.find('.lead-information-col').first();
+        if (!$col.length) {
+            return;
+        }
+
+        var nationalCode = seed ? (seed.national_code || '') : ($modal.find('#siba_lead_national_code').val() || '');
+        var jobGroupName = seed ? (seed.job_group_name || '') : ($modal.find('#siba_lead_job_group_id option:selected').text() || '');
+        var positionName = seed ? (seed.position_name || seed.title || '') : ($modal.find('#siba_lead_position_id option:selected').text() || '');
+
+        if ($modal.find('#siba_lead_position_id').length) {
+            var selectedPosition = $modal.find('#siba_lead_position_id option:selected').text();
+            if (selectedPosition && selectedPosition !== labels.select) {
+                positionName = selectedPosition;
+            }
+        }
+        if ($modal.find('#siba_lead_job_group_id').length) {
+            var selectedGroup = $modal.find('#siba_lead_job_group_id option:selected').text();
+            if (selectedGroup && selectedGroup !== labels.select) {
+                jobGroupName = selectedGroup;
+            }
+        }
+
+        var $titleDt = $col.find('dt.lead-field-heading').filter(function () {
+            var text = normalizeLabel($(this).text());
+            return text.indexOf('title') !== -1 || text.indexOf('سمت') !== -1 || text.indexOf('lead_title') !== -1;
+        }).first();
+        if ($titleDt.length) {
+            $titleDt.text(labels.position);
+            $titleDt.next('dd').text(positionName || '—');
+        }
+
+        function ensureViewField(key, label, value) {
+            var $existing = $col.find('dt[data-siba-profile="' + key + '"]');
+            if (!$existing.length) {
+                var $companyDt = $col.find('dt.lead-field-heading').filter(function () {
+                    var text = normalizeLabel($(this).text());
+                    return text.indexOf('company') !== -1 || text.indexOf('شرکت') !== -1;
+                }).first();
+                if (!$companyDt.length) {
+                    return;
+                }
+                $existing = $('<dt class="lead-field-heading tw-font-normal tw-text-neutral-500"></dt>')
+                    .attr('data-siba-profile', key)
+                    .text(label);
+                var $dd = $('<dd class="tw-text-neutral-900 tw-mt-1"></dd>')
+                    .attr('data-siba-profile-value', key);
+                $companyDt.next('dd').after($dd).after($existing);
+            }
+            $existing.text(label);
+            $col.find('[data-siba-profile-value="' + key + '"]').text(value || '—');
+        }
+
+        ensureViewField('national_code', labels.nationalCode, nationalCode);
+        ensureViewField('job_group', labels.jobGroup, jobGroupName);
+    }
+
+    function injectLeadProfileFields($modal) {
+        var $form = $modal.find('#lead_form');
+        if (!$form.length || !canInitLeadLocationFields($modal)) {
+            return;
+        }
+
+        if ($form.find('#siba_lead_national_code').length) {
+            refreshLeadProfilePickers($modal);
+            updateLeadProfileView($modal);
+            return;
+        }
+
+        var labels = getProfileLabels();
+        var seed = window.sibaLeadProfileSeed || null;
+        var $titleGroup = $form.find('input[name="title"]').closest('.form-group');
+        var $companyGroup = $form.find('input[name="company"]').closest('.form-group');
+
+        if ($titleGroup.length) {
+            $titleGroup.addClass('siba-hide-lead-field').hide();
+            $titleGroup.find('input[name="title"]').prop('disabled', false);
+        }
+
+        var $positionGroup = $('<div class="form-group siba-lead-profile-position"></div>');
+        $positionGroup.append('<label class="control-label">' + labels.position + '</label>');
+        var $positionSelect = $('<select>', {
+            id: 'siba_lead_position_id',
+            name: 'position_id',
+            class: 'form-control selectpicker',
+            'data-none-selected-text': labels.select
+        });
+        $positionSelect.html(buildPositionOptions(seed ? seed.position_id : ''));
+        $positionGroup.append($positionSelect);
+
+        if ($titleGroup.length) {
+            $positionGroup.insertAfter($titleGroup);
+        } else if ($form.find('input[name="name"]').length) {
+            $positionGroup.insertAfter($form.find('input[name="name"]').closest('.form-group'));
+        }
+
+        var $nationalGroup = $('<div class="form-group siba-lead-profile-national-code"></div>');
+        $nationalGroup.append('<label class="control-label">' + labels.nationalCode + '</label>');
+        var $nationalInput = $('<input>', {
+            type: 'text',
+            id: 'siba_lead_national_code',
+            name: 'national_code',
+            class: 'form-control',
+            maxlength: 20,
+            value: seed ? (seed.national_code || '') : ''
+        });
+        $nationalGroup.append($nationalInput);
+
+        var $jobGroupWrap = $('<div class="form-group siba-lead-profile-job-group"></div>');
+        $jobGroupWrap.append('<label class="control-label">' + labels.jobGroup + '</label>');
+        var $jobGroupSelect = $('<select>', {
+            id: 'siba_lead_job_group_id',
+            name: 'job_group_id',
+            class: 'form-control selectpicker',
+            'data-none-selected-text': labels.select
+        });
+        $jobGroupSelect.html(buildJobGroupOptions(seed ? seed.job_group_id : ''));
+        $jobGroupWrap.append($jobGroupSelect);
+
+        if ($companyGroup.length) {
+            $nationalGroup.insertAfter($companyGroup);
+            $jobGroupWrap.insertAfter($nationalGroup);
+        } else {
+            $form.find('.col-md-6').first().append($nationalGroup).append($jobGroupWrap);
+        }
+
+        mountLocationSelectpicker($positionSelect);
+        mountLocationSelectpicker($jobGroupSelect);
+
+        $positionSelect.on('changed.bs.select.sibaProfile', function () {
+            syncLeadProfileTitle($form);
+            updateLeadProfileView($modal);
+        });
+
+        $jobGroupSelect.on('changed.bs.select.sibaProfile', function () {
+            updateLeadProfileView($modal);
+        });
+
+        $nationalInput.on('input.sibaProfile change.sibaProfile', function () {
+            updateLeadProfileView($modal);
+        });
+
+        $form.off('submit.sibaProfile').on('submit.sibaProfile', function () {
+            syncLeadProfileTitle($form);
+        });
+
+        refreshLeadProfilePickers($modal);
+        updateLeadProfileView($modal);
+    }
+
+    function refreshLeadProfilePickers($modal) {
+        var $form = $modal.find('#lead_form');
+        if (!$form.length) {
+            return;
+        }
+
+        var seed = window.sibaLeadProfileSeed || null;
+        var $position = $form.find('#siba_lead_position_id');
+        var $jobGroup = $form.find('#siba_lead_job_group_id');
+        var $national = $form.find('#siba_lead_national_code');
+
+        if (!$position.length) {
+            return;
+        }
+
+        if (seed) {
+            if (!$national.val() && seed.national_code) {
+                $national.val(seed.national_code);
+            }
+            if (!$position.val() && seed.position_id) {
+                $position.selectpicker('val', String(seed.position_id));
+            }
+            if (!$jobGroup.val() && seed.job_group_id) {
+                $jobGroup.selectpicker('val', String(seed.job_group_id));
+            }
+        }
+
+        mountLocationSelectpicker($position);
+        mountLocationSelectpicker($jobGroup);
+        syncLeadProfileTitle($form);
+    }
+
     function shouldApplyDefaultCountry() {
         return $('.siba-leads-kan-ban').length > 0
             && window.sibaLeadsDefaultCountryId > 0;
@@ -592,6 +1064,12 @@
 
         var leadId = $form.find('input[name="leadid"]').val();
         if (leadId) {
+            return;
+        }
+
+        var $hiddenCountry = $form.find('input[data-siba-default-country]');
+        if ($hiddenCountry.length) {
+            $hiddenCountry.val(String(window.sibaLeadsDefaultCountryId));
             return;
         }
 
@@ -635,13 +1113,31 @@
         hideLeadProfileFields($modal);
         fixLeadModalStatusSourceFields($modal);
         replaceLeadLocationFields($modal);
+        injectLeadProfileFields($modal);
         applyDefaultCountry($modal);
         hideEmptyProfileDashes($modal);
         bindLeadPhoneUnique($modal);
+        ensureLeadModalSelectsEnabled($modal);
 
         // Proposals not used for now — hide tab + pane.
         $modal.find('a[href="#tab_proposals_leads"]').closest('li').addClass('siba-hide-lead-field');
         $modal.find('#tab_proposals_leads').addClass('siba-hide-lead-field');
+    }
+
+    function getLeadModalLeadId($modal) {
+        $modal = $modal && $modal.length ? $modal : $('#lead-modal');
+        var leadId = String($modal.find('input[name="leadid"]').val() || '').trim();
+        if (leadId) {
+            return leadId;
+        }
+
+        var action = String($modal.find('#lead_form').attr('action') || '');
+        var match = action.match(/leads\/lead\/(\d+)/i);
+        return match ? match[1] : '';
+    }
+
+    function ensureLeadIdInForm($modal) {
+        // Intentionally empty: lead id must not be posted on save (not a tblleads column).
     }
 
     function bindLeadPhoneUnique($modal) {
@@ -650,9 +1146,18 @@
         if (!$form.length || !$phone.length || typeof $phone.rules !== 'function') {
             return;
         }
+
+        ensureLeadIdInForm($modal);
+
         if ($phone.data('sibaPhoneUnique')) {
-            return;
+            try {
+                $phone.rules('remove', 'remote');
+            } catch (e) {
+                // Rule may not exist yet.
+            }
+            $phone.removeData('sibaPhoneUnique');
         }
+
         $phone.data('sibaPhoneUnique', true);
         $phone.rules('add', {
             remote: {
@@ -663,7 +1168,7 @@
                         return $phone.val();
                     },
                     lead_id: function () {
-                        return $modal.find('input[name="leadid"]').val() || '';
+                        return getLeadModalLeadId($modal);
                     }
                 }
             },
@@ -695,6 +1200,8 @@
 
     $(document).on('hidden.bs.modal', '#lead-modal', function () {
         window.sibaLeadLocationSeed = null;
+        window.sibaLeadProfileSeed = null;
+        cleanupLocationPickerArtifacts();
     });
 
     function isLeadRelatedTask($scope) {
@@ -838,6 +1345,10 @@
             return;
         }
 
+        ensureLeadIdInForm($modal);
+
+        $form.find('input[name="leadid"], input[name="lead_id"]').remove();
+
         $form.find('select.selectpicker').each(function () {
             var $select = $(this);
             if (!$select.parent().hasClass('bootstrap-select')) {
@@ -851,6 +1362,7 @@
         });
 
         syncLeadLocationHiddenFields($modal);
+        syncLeadProfileTitle($form);
 
         $form.find('#siba_lead_province_id, #siba_lead_city_id').each(function () {
             var $select = $(this);

@@ -838,12 +838,45 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 #lead-modal .lead-edit .siba-lead-location-province,
 #lead-modal .lead-edit .siba-lead-location-city {
     position: relative;
-    z-index: 1;
+    margin-bottom: 14px;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .control-label,
+#lead-modal .lead-edit .siba-lead-location-city .control-label {
+    display: block;
+    margin-bottom: 6px;
 }
 
 #lead-modal .lead-edit .siba-lead-location-province .bootstrap-select,
 #lead-modal .lead-edit .siba-lead-location-city .bootstrap-select {
     width: 100% !important;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .bootstrap-select.open,
+#lead-modal .lead-edit .siba-lead-location-city .bootstrap-select.open {
+    z-index: 30;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .bootstrap-select .dropdown-menu,
+#lead-modal .lead-edit .siba-lead-location-city .bootstrap-select .dropdown-menu {
+    max-height: 280px;
+    z-index: 1066;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .bootstrap-select.disabled,
+#lead-modal .lead-edit .siba-lead-location-city .bootstrap-select.disabled,
+#lead-modal .lead-edit .siba-lead-profile-position .bootstrap-select.disabled,
+#lead-modal .lead-edit .siba-lead-profile-job-group .bootstrap-select.disabled {
+    opacity: 1;
+}
+
+#lead-modal .lead-edit .siba-lead-location-province .bootstrap-select.disabled .dropdown-toggle,
+#lead-modal .lead-edit .siba-lead-location-city .bootstrap-select.disabled .dropdown-toggle,
+#lead-modal .lead-edit .siba-lead-profile-position .bootstrap-select.disabled .dropdown-toggle,
+#lead-modal .lead-edit .siba-lead-profile-job-group .bootstrap-select.disabled .dropdown-toggle {
+    background-color: #fff;
+    cursor: pointer;
+    opacity: 1;
 }
 
 #lead-modal .lead-edit .input-group-select {

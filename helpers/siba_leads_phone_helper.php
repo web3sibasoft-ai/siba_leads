@@ -157,6 +157,48 @@ function &siba_leads_created_phones_this_request(): array
     return $GLOBALS['siba_leads_created_phones'];
 }
 
+/**
+ * Resolve the lead id being edited from POST/URI (for duplicate-phone exclusion).
+ */
+function siba_leads_resolve_lead_exclude_id_from_request(): int
+{
+    $CI = &get_instance();
+
+    $fromPost = (int) $CI->input->post('lead_id');
+    if ($fromPost > 0) {
+        return $fromPost;
+    }
+
+    $fromPost = (int) $CI->input->post('leadid');
+    if ($fromPost > 0) {
+        return $fromPost;
+    }
+
+    $segments = $CI->uri->segment_array();
+    $count    = count($segments);
+    for ($i = 0; $i < $count - 1; $i++) {
+        if (strtolower((string) $segments[$i]) === 'leads'
+            && strtolower((string) ($segments[$i + 1] ?? '')) === 'lead'
+            && isset($segments[$i + 2])
+            && ctype_digit((string) $segments[$i + 2])) {
+            return (int) $segments[$i + 2];
+        }
+    }
+
+    $paths = array_filter([
+        (string) $CI->uri->uri_string(),
+        (string) ($CI->input->server('REQUEST_URI') ?: ''),
+    ]);
+
+    foreach ($paths as $path) {
+        if (preg_match('#leads/lead/(\d+)#i', $path, $m)) {
+            return (int) $m[1];
+        }
+    }
+
+    return 0;
+}
+
 function siba_leads_duplicate_phone_message($existingId = 0): string
 {
     $msg = _l('siba_leads_duplicate_phone');
@@ -225,13 +267,13 @@ function siba_leads_guard_duplicate_phone()
         if (!is_staff_member()) {
             ajax_access_denied();
         }
-        $exclude = (int) $CI->input->post('lead_id');
+        $exclude = siba_leads_resolve_lead_exclude_id_from_request();
         $dup     = siba_leads_phone_is_duplicate($CI->input->post('phonenumber'), $exclude);
         echo json_encode(!$dup);
         die;
     }
 
-    if (!preg_match('#(?:^|/)leads/lead(?:/(\d+))?(?:/|\?|$)#', $path, $m)) {
+    if (!preg_match('#leads/lead(?:/(\d+))?(?:/|\?|$)#i', $path, $m)) {
         return;
     }
 
@@ -239,6 +281,6 @@ function siba_leads_guard_duplicate_phone()
         return;
     }
 
-    $exclude = isset($m[1]) ? (int) $m[1] : (int) $CI->input->post('leadid');
+    $exclude = siba_leads_resolve_lead_exclude_id_from_request();
     siba_leads_abort_if_duplicate_phone($CI->input->post('phonenumber'), $exclude);
 }

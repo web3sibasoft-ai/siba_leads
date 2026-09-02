@@ -81,6 +81,37 @@ function siba_leads_get_active_cities($province_id): array
         ->result_array();
 }
 
+/**
+ * Active cities grouped by province_id (for lead modal client-side lookup).
+ *
+ * @return array<int, array<int, array<string, mixed>>>
+ */
+function siba_leads_get_active_cities_by_province(): array
+{
+    $CI = &get_instance();
+    $table = db_prefix() . 'siba_cities';
+    if (!$CI->db->table_exists($table)) {
+        return [];
+    }
+
+    $rows = $CI->db->where('status', 1)
+        ->where('province_id >', 0)
+        ->order_by('city_name', 'ASC')
+        ->get($table)
+        ->result_array();
+
+    $grouped = [];
+    foreach ($rows as $row) {
+        $provinceId = (int) ($row['province_id'] ?? 0);
+        if ($provinceId < 1) {
+            continue;
+        }
+        $grouped[$provinceId][] = $row;
+    }
+
+    return $grouped;
+}
+
 function siba_leads_get_province_name($province_id): string
 {
     $province_id = (int) $province_id;
@@ -211,17 +242,44 @@ function siba_leads_sync_location_fields(array $data): array
 function siba_leads_intercept_lead_location_post(): void
 {
     $CI = &get_instance();
-    if ($CI->router->fetch_class() !== 'leads' || $CI->router->fetch_method() !== 'lead') {
+    if (strtolower((string) $CI->router->fetch_class()) !== 'leads'
+        || strtolower((string) $CI->router->fetch_method()) !== 'lead') {
         return;
     }
     if (!$CI->input->post()) {
         return;
     }
 
-    $normalized = siba_leads_sync_location_fields($CI->input->post(null, true));
-    foreach ($normalized as $key => $value) {
-        $_POST[$key] = $value;
+    if (function_exists('siba_leads_ensure_lead_columns')) {
+        siba_leads_ensure_lead_columns();
     }
+
+    $post = $CI->input->post(null, false);
+    if (!is_array($post)) {
+        $post = [];
+    }
+
+    $post = siba_leads_sync_location_fields($post);
+    if (function_exists('siba_leads_sync_profile_fields')) {
+        $post = siba_leads_sync_profile_fields($post);
+    }
+
+    $patchKeys = ['province_id', 'city_id', 'state', 'city', 'country', 'national_code', 'job_group_id', 'position_id', 'title'];
+    foreach ($patchKeys as $key) {
+        if (array_key_exists($key, $post)) {
+            $_POST[$key] = $post[$key];
+        }
+    }
+
+    $table = db_prefix() . 'leads';
+    foreach (['province_id', 'city_id', 'national_code', 'job_group_id', 'position_id'] as $column) {
+        if (isset($_POST[$column]) && !$CI->db->field_exists($column, $table)) {
+            unset($_POST[$column]);
+        }
+    }
+
+    // Perfex identifies the lead from the URL; these are not tblleads columns.
+    unset($_POST['leadid'], $_POST['lead_id']);
 }
 
 /**
