@@ -199,6 +199,150 @@ function siba_leads_resolve_lead_exclude_id_from_request(): int
     return 0;
 }
 
+/**
+ * Existing lead ids that share this phone (normalized), excluding $excludeId.
+ *
+ * @return int[]
+ */
+function siba_leads_find_sibling_lead_ids_by_phone($phone, $excludeId = 0, $limit = 10): array
+{
+    $normalized = siba_leads_normalize_phone($phone);
+    if ($normalized === '') {
+        return [];
+    }
+
+    $CI = &get_instance();
+    $table = db_prefix() . 'leads';
+    if (!$CI->db->table_exists($table) || !$CI->db->field_exists('phonenumber', $table)) {
+        return [];
+    }
+
+    $last10 = strlen($normalized) >= 10 ? substr($normalized, -10) : ltrim($normalized, '0');
+    $variants = siba_leads_phone_variants($phone);
+
+    $CI->db->select('id, phonenumber');
+    $CI->db->from($table);
+    if ((int) $excludeId > 0) {
+        $CI->db->where('id !=', (int) $excludeId);
+    }
+    $CI->db->group_start();
+    foreach ($variants as $variant) {
+        $CI->db->or_where('phonenumber', $variant);
+    }
+    if ($last10 !== '') {
+        $CI->db->or_like('phonenumber', $last10, 'before');
+    }
+    $CI->db->group_end();
+    $CI->db->order_by('id', 'ASC');
+    $CI->db->limit(max(1, (int) $limit) * 3);
+    $rows = $CI->db->get()->result_array();
+
+    $ids = [];
+    foreach ($rows as $row) {
+        if (siba_leads_normalize_phone($row['phonenumber'] ?? '') !== $normalized) {
+            continue;
+        }
+        $ids[] = (int) $row['id'];
+        if (count($ids) >= (int) $limit) {
+            break;
+        }
+    }
+
+    return $ids;
+}
+
+/**
+ * Soft duplicate info for API / UI (never blocks insert by itself).
+ *
+ * @return array{is_duplicate:bool,existing_id:int,sibling_ids:int[]}
+ */
+function siba_leads_phone_duplicate_info($phone, $excludeId = 0): array
+{
+    $siblings = siba_leads_find_sibling_lead_ids_by_phone($phone, $excludeId, 10);
+    $existing = $siblings[0] ?? 0;
+
+    $normalized = siba_leads_normalize_phone($phone);
+    if ($normalized !== '') {
+        $created = siba_leads_created_phones_this_request();
+        if (isset($created[$normalized]) && (int) $created[$normalized] !== (int) $excludeId) {
+            $fromReq = (int) $created[$normalized];
+            if ($fromReq > 0 && !in_array($fromReq, $siblings, true)) {
+                array_unshift($siblings, $fromReq);
+                $existing = $existing ?: $fromReq;
+            }
+        }
+    }
+
+    return [
+        'is_duplicate' => $existing > 0,
+        'existing_id'  => (int) $existing,
+        'sibling_ids'  => array_values(array_unique(array_map('intval', $siblings))),
+    ];
+}
+
+/**
+ * Annotate kanban/list lead rows with phone_duplicate + phone_duplicate_of.
+ *
+ * @param array<int, array<string, mixed>> $leads
+ * @return array<int, array<string, mixed>>
+ */
+function siba_leads_annotate_phone_duplicates(array $leads): array
+{
+    if ($leads === []) {
+        return $leads;
+    }
+
+    $byNorm = [];
+    foreach ($leads as $idx => $lead) {
+        $norm = siba_leads_normalize_phone($lead['phonenumber'] ?? '');
+        $leads[$idx]['phone_duplicate'] = false;
+        $leads[$idx]['phone_duplicate_of'] = 0;
+        if ($norm === '') {
+            continue;
+        }
+        $byNorm[$norm][] = $idx;
+    }
+
+    // Within the current page first.
+    foreach ($byNorm as $norm => $indexes) {
+        if (count($indexes) < 2) {
+            continue;
+        }
+        $minId = null;
+        foreach ($indexes as $idx) {
+            $id = (int) ($leads[$idx]['id'] ?? 0);
+            if ($minId === null || ($id > 0 && $id < $minId)) {
+                $minId = $id;
+            }
+        }
+        foreach ($indexes as $idx) {
+            $id = (int) ($leads[$idx]['id'] ?? 0);
+            if ($minId && $id !== $minId) {
+                $leads[$idx]['phone_duplicate'] = true;
+                $leads[$idx]['phone_duplicate_of'] = $minId;
+            } elseif ($minId && $id === $minId) {
+                // Oldest on page may still have older siblings in DB — check below.
+            }
+        }
+    }
+
+    // Check DB for any phone that might have siblings outside this page.
+    foreach ($leads as $idx => $lead) {
+        $phone = $lead['phonenumber'] ?? '';
+        $id = (int) ($lead['id'] ?? 0);
+        if ($phone === '' || $id < 1) {
+            continue;
+        }
+        $info = siba_leads_phone_duplicate_info($phone, $id);
+        if ($info['is_duplicate']) {
+            $leads[$idx]['phone_duplicate'] = true;
+            $leads[$idx]['phone_duplicate_of'] = (int) $info['existing_id'];
+        }
+    }
+
+    return $leads;
+}
+
 function siba_leads_duplicate_phone_message($existingId = 0): string
 {
     $msg = _l('siba_leads_duplicate_phone');
@@ -209,48 +353,26 @@ function siba_leads_duplicate_phone_message($existingId = 0): string
     return $msg;
 }
 
-/**
- * Stop lead save when the phone already exists (admin AJAX form / model add).
- */
-function siba_leads_abort_if_duplicate_phone($phone, $excludeId = 0): void
+function siba_leads_duplicate_phone_warning_message($existingId = 0): string
 {
-    $existing = siba_leads_find_lead_id_by_phone($phone, $excludeId);
-    $normalized = siba_leads_normalize_phone($phone);
-    if ($normalized !== '') {
-        $created = siba_leads_created_phones_this_request();
-        if (isset($created[$normalized]) && (int) $created[$normalized] !== (int) $excludeId) {
-            $existing = $existing ?: (int) $created[$normalized];
-        }
+    $msg = _l('siba_leads_duplicate_phone_warning');
+    if ($existingId > 0) {
+        $msg .= ' (#' . (int) $existingId . ')';
     }
 
-    if ($existing <= 0) {
-        return;
-    }
-
-    $CI  = &get_instance();
-    $msg = siba_leads_duplicate_phone_message($existing);
-    $uri = (string) $CI->uri->uri_string();
-
-    if (strpos($uri, 'siba_api/') !== false) {
-        return;
-    }
-
-    if ($CI->input->is_ajax_request() || strpos($uri, 'leads/lead') !== false) {
-        echo json_encode([
-            'success'     => false,
-            'message'     => $msg,
-            'id'          => false,
-            'existing_id' => $existing,
-            'leadView'    => [],
-        ]);
-        die;
-    }
-
-    show_error($msg, 409, _l('siba_leads_duplicate_phone_title'));
+    return $msg;
 }
 
 /**
- * Admin POST guards: live unique check + block lead create/update.
+ * @deprecated Soft policy: duplicates are allowed. Kept as no-op for old callers.
+ */
+function siba_leads_abort_if_duplicate_phone($phone, $excludeId = 0): void
+{
+    // Intentionally empty — duplicate phones are allowed; UI/API warn with a badge.
+}
+
+/**
+ * Admin: soft phone check (always allow save). validate_phone returns JSON for warning UI.
  */
 function siba_leads_guard_duplicate_phone()
 {
@@ -268,19 +390,21 @@ function siba_leads_guard_duplicate_phone()
             ajax_access_denied();
         }
         $exclude = siba_leads_resolve_lead_exclude_id_from_request();
-        $dup     = siba_leads_phone_is_duplicate($CI->input->post('phonenumber'), $exclude);
-        echo json_encode(!$dup);
+        $info    = siba_leads_phone_duplicate_info($CI->input->post('phonenumber'), $exclude);
+        // Soft policy: always "valid" for jQuery Validate; clients that expect bool still get true.
+        // Richer payload for the warning UI:
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'           => true,
+            'available'    => !$info['is_duplicate'],
+            'is_duplicate' => $info['is_duplicate'],
+            'existing_id'  => $info['existing_id'] ?: null,
+            'message'      => $info['is_duplicate']
+                ? siba_leads_duplicate_phone_warning_message($info['existing_id'])
+                : '',
+        ], JSON_UNESCAPED_UNICODE);
         die;
     }
 
-    if (!preg_match('#leads/lead(?:/(\d+))?(?:/|\?|$)#i', $path, $m)) {
-        return;
-    }
-
-    if ($CI->input->post('phonenumber') === null && $CI->input->post('name') === null) {
-        return;
-    }
-
-    $exclude = siba_leads_resolve_lead_exclude_id_from_request();
-    siba_leads_abort_if_duplicate_phone($CI->input->post('phonenumber'), $exclude);
+    // Do not abort leads/lead POST — duplicates are allowed.
 }

@@ -24,18 +24,22 @@ hooks()->add_action('app_admin_footer', 'siba_leads_process_csv_import_assignmen
 hooks()->add_filter('module_' . SIBA_LEADS_MODULE_NAME . '_action_links', 'siba_leads_action_links');
 hooks()->add_filter('sidebar_menu_items', 'siba_leads_ensure_leads_menu_children', 1000);
 hooks()->add_filter('setup_menu_items', 'siba_leads_ensure_setup_teams_menu', 1000);
+hooks()->add_filter('before_lead_added', 'siba_leads_filter_website_payload', 5);
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_before_lead_added');
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_lead_location_fields', 20);
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_profile_fields', 25);
 hooks()->add_action('lead_created', 'siba_leads_action_lead_created');
+hooks()->add_action('lead_created', 'siba_leads_action_website_lead_created', 30);
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_before_email_lead');
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_lead_location_fields', 20);
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_profile_fields', 25);
 hooks()->add_action('pre_admin_init', 'siba_leads_intercept_lead_location_post', 1);
 hooks()->add_action('after_lead_updated', 'siba_leads_persist_location_on_save');
 hooks()->add_action('after_lead_updated', 'siba_leads_persist_profile_on_save');
+hooks()->add_action('after_lead_updated', 'siba_leads_action_website_lead_updated', 30);
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_profile_seed');
+hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_form_meta_seed');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
 hooks()->add_filter('not_importable_leads_fields', 'siba_leads_not_importable_leads_fields');
@@ -237,7 +241,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260902e') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260908f') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -261,6 +265,7 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadsHideLeadFields = ' . json_encode($hideFields, JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMarkPaidConfirm = ' . json_encode(_l('siba_leads_card_mark_paid_confirm'), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsDuplicatePhone = ' . json_encode(_l('siba_leads_duplicate_phone'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsDuplicatePhoneWarning = ' . json_encode(_l('siba_leads_duplicate_phone_warning'), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsProvinces = ' . json_encode($provinces, JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsCitiesByProvince = ' . json_encode(
         (object) $citiesByProvince,
@@ -280,11 +285,25 @@ function siba_leads_load_admin_js()
         'jobGroup'     => _l('siba_leads_job_group'),
         'select'       => _l('dropdown_non_selected_tex'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsFormMetaLabels = ' . json_encode([
+        'title'               => _l('siba_leads_website_form_info'),
+        'formIdentifier'      => _l('form_identifier'),
+        'formSourceLink'      => _l('form_source_link'),
+        'formSourcePageTitle' => _l('form_source_page_title'),
+        'smsVerification'     => _l('sms_verification'),
+        'smsVerified'         => _l('siba_leads_sms_verified'),
+        'smsUnverified'       => _l('siba_leads_sms_unverified'),
+        'trackingId'          => _l('demo_request_tracking_id'),
+        'packageNumber'       => _l('user_package_number'),
+        'requestType'         => _l('request_type'),
+        'descriptionMap'      => _l('siba_leads_form_description_map'),
+        'extraMeta'           => _l('siba_leads_form_extra_meta'),
+    ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadJobGroups = ' . json_encode($jobGroups, JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadPositions = ' . json_encode($positions, JSON_UNESCAPED_UNICODE) . ';</script>';
     $defaultCountryId = function_exists('siba_leads_default_country_id') ? siba_leads_default_country_id() : 0;
     echo '<script>window.sibaLeadsDefaultCountryId = ' . (int) $defaultCountryId . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260902g') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260908g') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

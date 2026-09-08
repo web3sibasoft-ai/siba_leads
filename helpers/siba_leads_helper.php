@@ -7,6 +7,7 @@ require_once __DIR__ . '/siba_leads_assignment_helper.php';
 require_once __DIR__ . '/siba_leads_phone_helper.php';
 require_once __DIR__ . '/siba_leads_location_helper.php';
 require_once __DIR__ . '/siba_leads_profile_helper.php';
+require_once __DIR__ . '/siba_leads_website_payload_helper.php';
 
 /**
  * Can the current staff see every lead on the Siba kanban?

@@ -201,10 +201,6 @@ function siba_leads_sync_unassigned_into_backlog(): void
  */
 function siba_leads_filter_before_lead_added($data)
 {
-    if (is_array($data) && function_exists('siba_leads_abort_if_duplicate_phone')) {
-        siba_leads_abort_if_duplicate_phone($data['phonenumber'] ?? '', 0);
-    }
-
     if (!is_array($data) || !siba_leads_auto_assign_enabled()) {
         return $data;
     }
@@ -228,10 +224,6 @@ function siba_leads_filter_before_lead_added($data)
  */
 function siba_leads_filter_before_email_lead($data)
 {
-    if (is_array($data) && function_exists('siba_leads_abort_if_duplicate_phone')) {
-        siba_leads_abort_if_duplicate_phone($data['phonenumber'] ?? '', 0);
-    }
-
     if (!is_array($data) || !siba_leads_auto_assign_enabled()) {
         return $data;
     }

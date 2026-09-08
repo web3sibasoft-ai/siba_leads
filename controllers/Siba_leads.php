@@ -242,7 +242,8 @@ class Siba_leads extends AdminController
     }
 
     /**
-     * AJAX: true when the phone is free, false when another lead already has it.
+     * AJAX: soft phone check — never blocks save.
+     * Returns { ok, available, is_duplicate, existing_id, message }.
      */
     public function validate_phone()
     {
@@ -251,8 +252,21 @@ class Siba_leads extends AdminController
         }
 
         $exclude = siba_leads_resolve_lead_exclude_id_from_request();
-        $dup     = siba_leads_phone_is_duplicate($this->input->post('phonenumber'), $exclude);
-        echo json_encode(!$dup);
+        $info    = function_exists('siba_leads_phone_duplicate_info')
+            ? siba_leads_phone_duplicate_info($this->input->post('phonenumber'), $exclude)
+            : ['is_duplicate' => false, 'existing_id' => 0];
+
+        $this->output
+            ->set_content_type('application/json')
+            ->set_output(json_encode([
+                'ok'           => true,
+                'available'    => empty($info['is_duplicate']),
+                'is_duplicate' => !empty($info['is_duplicate']),
+                'existing_id'  => !empty($info['existing_id']) ? (int) $info['existing_id'] : null,
+                'message'      => !empty($info['is_duplicate'])
+                    ? siba_leads_duplicate_phone_warning_message((int) ($info['existing_id'] ?: 0))
+                    : '',
+            ], JSON_UNESCAPED_UNICODE));
     }
 
     /**

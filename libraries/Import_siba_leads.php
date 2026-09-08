@@ -67,7 +67,7 @@ class Import_siba_leads extends Import_leads
                 continue;
             }
 
-            if ($this->isDuplicateByUniqueFields($insert, $uniqueFields) || $this->isDuplicatePhone($insert)) {
+            if ($this->isDuplicateByUniqueFields($insert, $uniqueFields)) {
                 continue;
             }
 
@@ -137,6 +137,10 @@ class Import_siba_leads extends Import_leads
     protected function isDuplicateByUniqueFields(array $data, array $uniqueFields)
     {
         foreach ($uniqueFields as $field) {
+            if ($field === 'phonenumber' || $field === 'email') {
+                // Soft policy: phone/email duplicates are allowed.
+                continue;
+            }
             if ((isset($data[$field]) && $data[$field] != '')
                 && total_rows(db_prefix() . 'leads', [$field => $data[$field]]) > 0) {
                 return true;

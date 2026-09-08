@@ -204,7 +204,7 @@
         });
 
         // View mode: match localized labels (+ public / whatsapp / value / language).
-        $modal.find('.lead-view dt.lead-field-heading').each(function () {
+        $modal.find('#leadViewWrapper dt.lead-field-heading').each(function () {
             var label = normalizeLabel($(this).text());
             if (hideSet[label] || label.indexOf('whatsapp') !== -1) {
                 $(this).addClass('siba-hide-lead-field');
@@ -828,6 +828,438 @@
         };
     }
 
+    function getFormMetaLabels() {
+        return window.sibaLeadsFormMetaLabels || {
+            title: 'Website form info',
+            formIdentifier: 'Form ID',
+            formSourceLink: 'Form source link',
+            formSourcePageTitle: 'Form source page title',
+            smsVerification: 'SMS verification',
+            smsVerified: 'Verified',
+            smsUnverified: 'Not verified',
+            trackingId: 'Tracking ID',
+            packageNumber: 'Package number',
+            requestType: 'Request type',
+            descriptionMap: 'More details',
+            extraMeta: 'Additional form fields'
+        };
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function formatFormMetaValue(value) {
+        var text = String(value == null ? '' : value).trim();
+        if (!text) {
+            return '';
+        }
+        if (/^https?:\/\//i.test(text)) {
+            return '<a class="siba-lead-form-meta__link" href="' + escapeHtml(text) + '" target="_blank" rel="noopener" dir="ltr">'
+                + escapeHtml(text) + '</a>';
+        }
+        if (/^(\+|0)?[\d\s\-()]{7,}$/.test(text)) {
+            return '<span dir="ltr">' + escapeHtml(text) + '</span>';
+        }
+        return escapeHtml(text);
+    }
+
+    function formMetaNativeValues(seed) {
+        return [
+            seed.form_identifier,
+            seed.form_source_link,
+            seed.form_source_page_title,
+            seed.demo_request_tracking_id,
+            seed.user_package_number,
+            seed.request_type
+        ].map(function (v) {
+            return String(v || '').trim().toLowerCase();
+        }).filter(Boolean);
+    }
+
+    function isNoteDetailKey(key) {
+        var normalized = String(key || '').trim().toLowerCase();
+        return [
+            'توضیحات',
+            'توضیح',
+            'description',
+            'message',
+            'note',
+            'notes',
+            'msg',
+            'متن پیام'
+        ].indexOf(normalized) !== -1;
+    }
+
+    function isDuplicateFormDetailKey(key) {
+        var normalized = String(key || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        var blocked = [
+            'شناسه پیگیری',
+            'شناسه پیگیری درخواست فرم',
+            'شناسه پیگیری درخواست دمو',
+            'شناسه فرم',
+            'صفحه مرجع ثبت فرم',
+            'لینک صفحه مرجع ثبت فرم',
+            'لینک مرجع فرم',
+            'عنوان صفحه مرجع فرم',
+            'نام و نام خانوادگی',
+            'نام',
+            'شماره تماس',
+            'موبایل',
+            'تلفن',
+            'نام مجموعه',
+            'ایمیل',
+            'آدرس ایمیل',
+            'فعالیت کسب و کار',
+            'form_id',
+            'gravity_entry_id',
+            'form_entry',
+            'track',
+            'tracking',
+            'ref_title',
+            'post_link',
+            'post_id',
+            'form_identifier',
+            'form_source_link',
+            'form_source_page_title',
+            'demo_request_tracking_id',
+            'sms_verification',
+            'user_package_number',
+            'request_type',
+            'package',
+            'شماره بسته',
+            'شماره بسته کاربر',
+            'نوع درخواست',
+            'name',
+            'affiliate_name',
+            'mobile',
+            'affiliate_mobile',
+            'phonenumber',
+            'phone',
+            'tel',
+            'company',
+            'email',
+            'activity',
+            'unique_id'
+        ];
+        for (var i = 0; i < blocked.length; i++) {
+            if (normalized === String(blocked[i]).toLowerCase()) {
+                return true;
+            }
+        }
+        // Soft match common profile duplicates (e.g. "نام کامل").
+        if (/^(نام|name|phone|mobile|tel|email|ایمیل|موبایل|تلفن)/.test(normalized)) {
+            return true;
+        }
+        return false;
+    }
+
+    function getLeadProfileDuplicateValues($modal, seed) {
+        var values = formMetaNativeValues(seed);
+        var selectors = [
+            'input[name="name"]',
+            'input[name="phonenumber"]',
+            'input[name="email"]',
+            'input[name="company"]'
+        ];
+        $.each(selectors, function (i, selector) {
+            var val = String($modal.find(selector).val() || '').trim().toLowerCase();
+            if (val) {
+                values.push(val);
+            }
+        });
+        $modal.find('#leadViewWrapper .lead-information-col dd').each(function () {
+            var text = String($(this).text() || '').trim().toLowerCase();
+            if (text && text !== '—' && text !== '-') {
+                values.push(text);
+            }
+        });
+        return values;
+    }
+
+    function isDuplicateFormDetail(key, value, seed, profileValues) {
+        if (isDuplicateFormDetailKey(key)) {
+            return true;
+        }
+        var v = String(value || '').trim().toLowerCase();
+        if (!v) {
+            return true;
+        }
+        var all = profileValues || formMetaNativeValues(seed);
+        return all.indexOf(v) !== -1;
+    }
+
+    function formMetaHasContent(seed) {
+        if (!seed) {
+            return false;
+        }
+        var keys = [
+            'form_identifier',
+            'form_source_link',
+            'form_source_page_title',
+            'sms_verification',
+            'demo_request_tracking_id',
+            'user_package_number',
+            'request_type'
+        ];
+        for (var i = 0; i < keys.length; i++) {
+            if (String(seed[keys[i]] || '').trim() !== '') {
+                return true;
+            }
+        }
+        if (seed.description_map && typeof seed.description_map === 'object') {
+            var mapKeys = Object.keys(seed.description_map);
+            for (var m = 0; m < mapKeys.length; m++) {
+                if (!isDuplicateFormDetail(mapKeys[m], seed.description_map[mapKeys[m]], seed)) {
+                    return true;
+                }
+            }
+        }
+        if ($.isArray(seed.meta) && seed.meta.length) {
+            return true;
+        }
+        return false;
+    }
+
+    function appendFormMetaChip($wrap, label, valueHtml) {
+        if (!valueHtml) {
+            return;
+        }
+        $wrap.append(
+            '<div class="siba-lead-form-meta__chip">'
+            + '<span class="siba-lead-form-meta__chip-label">' + escapeHtml(label) + '</span>'
+            + '<span class="siba-lead-form-meta__chip-value">' + valueHtml + '</span>'
+            + '</div>'
+        );
+    }
+
+    function hideWebsiteCustomFieldDuplicates($modal, seed) {
+        if (!seed) {
+            return;
+        }
+        var labels = getFormMetaLabels();
+        var labelSet = {};
+        $.each([
+            labels.formIdentifier,
+            labels.formSourceLink,
+            labels.formSourcePageTitle,
+            labels.smsVerification,
+            labels.trackingId,
+            labels.packageNumber,
+            labels.requestType,
+            'شناسه فرم',
+            'لینک مرجع فرم',
+            'عنوان صفحه مرجع فرم',
+            'شناسه پیگیری درخواست دمو',
+            'شماره بسته کاربر',
+            'نوع درخواست',
+            'تایید پیامک',
+            'پیامک'
+        ], function (i, label) {
+            var key = String(label || '').trim().toLowerCase();
+            if (key) {
+                labelSet[key] = true;
+            }
+        });
+
+        var valueSet = {};
+        $.each(formMetaNativeValues(seed), function (i, val) {
+            valueSet[val] = true;
+        });
+        if (String(seed.sms_verification || '').trim() !== '') {
+            valueSet[String(seed.sms_verification).trim().toLowerCase()] = true;
+            valueSet['0'] = true;
+            valueSet['1'] = true;
+        }
+
+        $modal.find('#leadViewWrapper .lead-information-col').each(function () {
+            var $col = $(this);
+            var $pairs = $col.find('dt');
+            if (!$pairs.length) {
+                return;
+            }
+            $pairs.each(function () {
+                var $dt = $(this);
+                var $dd = $dt.next('dd');
+                var label = String($dt.text() || '').trim().toLowerCase();
+                var value = String($dd.text() || '').trim().toLowerCase();
+                if (labelSet[label] || (value && valueSet[value])) {
+                    $dt.addClass('siba-hide-lead-field');
+                    $dd.addClass('siba-hide-lead-field');
+                }
+            });
+
+            // Hide whole custom-fields column when nothing visible remains.
+            var visible = $col.find('dt').filter(function () {
+                return !$(this).hasClass('siba-hide-lead-field') && !$(this).hasClass('siba-empty-field');
+            }).length;
+            if (!visible && $col.find('.lead-info-heading').length) {
+                $col.addClass('siba-hide-lead-field');
+            }
+        });
+    }
+
+    function injectLeadFormMeta($modal) {
+        var seed = window.sibaLeadFormMetaSeed || null;
+        // IMPORTANT: `.lead-view` also matches the top toolbar button — use the wrapper id.
+        var $view = $modal.find('#leadViewWrapper');
+        if (!$view.length) {
+            $view = $modal.find('div.lead-view').first();
+        }
+        if (!$view.length) {
+            return;
+        }
+
+        $modal.find('.siba-lead-form-meta-wrap').remove();
+        if (!formMetaHasContent(seed)) {
+            return;
+        }
+
+        var labels = getFormMetaLabels();
+        var profileValues = getLeadProfileDuplicateValues($modal, seed);
+        var $wrap = $('<div class="col-md-12 col-xs-12 siba-lead-form-meta-wrap"></div>');
+        var $card = $('<div class="siba-lead-form-meta"></div>');
+        var $header = $('<div class="siba-lead-form-meta__header"></div>');
+        $header.append('<h5 class="siba-lead-form-meta__title">' + escapeHtml(labels.title) + '</h5>');
+
+        if (String(seed.sms_verification || '') !== '') {
+            var verified = !!seed.sms_verified;
+            $header.append(
+                '<span class="siba-lead-form-meta__badge ' + (verified ? 'is-verified' : 'is-pending') + '">'
+                + escapeHtml(verified ? labels.smsVerified : labels.smsUnverified)
+                + '</span>'
+            );
+        }
+        $card.append($header);
+
+        var $chips = $('<div class="siba-lead-form-meta__chips"></div>');
+        appendFormMetaChip($chips, labels.formIdentifier, formatFormMetaValue(seed.form_identifier));
+        appendFormMetaChip($chips, labels.trackingId, formatFormMetaValue(seed.demo_request_tracking_id));
+        appendFormMetaChip($chips, labels.requestType, formatFormMetaValue(seed.request_type));
+        appendFormMetaChip($chips, labels.packageNumber, formatFormMetaValue(seed.user_package_number));
+        appendFormMetaChip($chips, labels.formSourcePageTitle, formatFormMetaValue(seed.form_source_page_title));
+        if (seed.form_source_link) {
+            appendFormMetaChip(
+                $chips,
+                labels.formSourceLink,
+                formatFormMetaValue(seed.form_source_link)
+            );
+        }
+        if ($chips.children().length) {
+            $card.append($chips);
+        }
+
+        var map = seed.description_map || {};
+        var noteText = '';
+        var uniqueRows = [];
+        $.each(Object.keys(map), function (i, key) {
+            var val = map[key];
+            if (isNoteDetailKey(key) && String(val || '').trim() !== '') {
+                if (!noteText) {
+                    noteText = String(val).trim();
+                }
+                return;
+            }
+            if (isDuplicateFormDetail(key, val, seed, profileValues)) {
+                return;
+            }
+            uniqueRows.push({ key: key, value: val });
+        });
+
+        if ($.isArray(seed.meta) && seed.meta.length) {
+            var shownKeys = {};
+            $.each(uniqueRows, function (i, row) {
+                shownKeys[String(row.key).toLowerCase()] = true;
+            });
+            $.each(seed.meta, function (i, row) {
+                var key = row && row.meta_key ? row.meta_key : '';
+                var val = row && row.meta_value ? row.meta_value : '';
+                if (!key || String(val).trim() === '') {
+                    return;
+                }
+                if (isNoteDetailKey(key)) {
+                    if (!noteText) {
+                        noteText = String(val).trim();
+                    }
+                    return;
+                }
+                if (shownKeys[String(key).toLowerCase()] || isDuplicateFormDetail(key, val, seed, profileValues)) {
+                    return;
+                }
+                uniqueRows.push({ key: key, value: val });
+                shownKeys[String(key).toLowerCase()] = true;
+            });
+        }
+
+        if (noteText) {
+            $card.append(
+                '<div class="siba-lead-form-meta__note">'
+                + '<div class="siba-lead-form-meta__note-label">' + escapeHtml(labels.descriptionMap) + '</div>'
+                + '<div class="siba-lead-form-meta__note-text">' + escapeHtml(noteText) + '</div>'
+                + '</div>'
+            );
+        }
+
+        if (uniqueRows.length) {
+            var $section = $('<div class="siba-lead-form-meta__section"></div>');
+            $section.append('<h6 class="siba-lead-form-meta__section-title">' + escapeHtml(labels.extraMeta) + '</h6>');
+            var $extraChips = $('<div class="siba-lead-form-meta__chips siba-lead-form-meta__chips--extra"></div>');
+            $.each(uniqueRows, function (i, row) {
+                appendFormMetaChip($extraChips, row.key, formatFormMetaValue(row.value));
+            });
+            $section.append($extraChips);
+            $card.append($section);
+        }
+
+        // Hide raw JSON description dump in view mode — structured block replaces it.
+        $view.find('dd').filter(function () {
+            var text = $.trim($(this).text());
+            return text.charAt(0) === '{' && (text.indexOf('track') !== -1 || text.indexOf('شناسه') !== -1 || text.indexOf('form_id') !== -1 || text.indexOf('نام') !== -1);
+        }).each(function () {
+            var $dd = $(this);
+            var $dt = $dd.prev('dt');
+            var $block = $dd.closest('.col-md-12');
+            $dd.addClass('siba-hide-lead-field');
+            if ($dt.length) {
+                $dt.addClass('siba-hide-lead-field');
+            }
+            if ($block.length && !$block.find('dt:not(.siba-hide-lead-field), dd:not(.siba-hide-lead-field)').length) {
+                $block.addClass('siba-hide-lead-field');
+            }
+        });
+
+        hideWebsiteCustomFieldDuplicates($modal, seed);
+
+        // Keep email/phone/links readable in RTL profile.
+        $view.find('a[href^="mailto:"], a[href^="tel:"], .lead-name').attr('dir', 'ltr');
+        $view.find('dd').each(function () {
+            var text = String($(this).text() || '').trim();
+            if (/@/.test(text) || /^(\+|0)?[\d\s\-()]{7,}$/.test(text) || /^https?:\/\//i.test(text)) {
+                $(this).attr('dir', 'ltr');
+            }
+        });
+
+        $wrap.append($card);
+
+        // Place full-width under the 3 profile columns (after their clearfix).
+        var $clear = $view.children('.clearfix').first();
+        if ($clear.length) {
+            $clear.after($wrap);
+        } else {
+            var $lastCol = $view.children('.lead-information-col').last();
+            if ($lastCol.length) {
+                $lastCol.after($wrap);
+            } else {
+                $view.append($wrap);
+            }
+        }
+    }
+
     function buildJobGroupOptions(selectedId) {
         var labels = getProfileLabels();
         var groups = window.sibaLeadJobGroups || [];
@@ -1083,7 +1515,7 @@
     }
 
     function hideEmptyProfileDashes($modal) {
-        $modal.find('.lead-view dd').each(function () {
+        $modal.find('#leadViewWrapper dd').each(function () {
             var $dd = $(this);
             if ($dd.hasClass('siba-hide-lead-field')) {
                 return;
@@ -1110,10 +1542,26 @@
         }
 
         $modal.addClass('siba-lead-modal-ready');
+        // Soft policy: don't block admin form on duplicate email/phone (Perfex unique remote rules).
+        if (Array.isArray(window.leadUniqueValidationFields)) {
+            window.leadUniqueValidationFields = window.leadUniqueValidationFields.filter(function (f) {
+                return f !== 'email' && f !== 'phonenumber';
+            });
+        }
+        var $form = $modal.find('#lead_form');
+        if ($form.length && typeof $form.find === 'function') {
+            ['email', 'phonenumber'].forEach(function (field) {
+                var $el = $form.find('input[name="' + field + '"]');
+                if ($el.length && typeof $el.rules === 'function') {
+                    try { $el.rules('remove', 'remote'); } catch (e) { /* ignore */ }
+                }
+            });
+        }
         hideLeadProfileFields($modal);
         fixLeadModalStatusSourceFields($modal);
         replaceLeadLocationFields($modal);
         injectLeadProfileFields($modal);
+        injectLeadFormMeta($modal);
         applyDefaultCountry($modal);
         hideEmptyProfileDashes($modal);
         bindLeadPhoneUnique($modal);
@@ -1143,39 +1591,84 @@
     function bindLeadPhoneUnique($modal) {
         var $form = $modal.find('#lead_form');
         var $phone = $form.find('input[name="phonenumber"]');
-        if (!$form.length || !$phone.length || typeof $phone.rules !== 'function') {
+        if (!$form.length || !$phone.length) {
             return;
         }
 
-        ensureLeadIdInForm($modal);
-
-        if ($phone.data('sibaPhoneUnique')) {
+        // Soft policy: never block save on duplicate phone — show a warning only.
+        if (typeof $phone.rules === 'function') {
             try {
                 $phone.rules('remove', 'remote');
             } catch (e) {
-                // Rule may not exist yet.
+                // ignore
             }
-            $phone.removeData('sibaPhoneUnique');
         }
 
-        $phone.data('sibaPhoneUnique', true);
-        $phone.rules('add', {
-            remote: {
-                url: admin_url + 'siba_leads/validate_phone',
-                type: 'post',
-                data: {
-                    phonenumber: function () {
-                        return $phone.val();
-                    },
-                    lead_id: function () {
-                        return getLeadModalLeadId($modal);
-                    }
+        var $warn = $modal.find('.siba-lead-phone-warning');
+        if (!$warn.length) {
+            $warn = $('<div class="siba-lead-phone-warning" role="status"></div>');
+            $phone.closest('.form-group, .input-group, td, .form-input-wrap').first().after($warn);
+            if (!$warn.parent().length) {
+                $phone.after($warn);
+            }
+        }
+
+        if ($phone.data('sibaPhoneWarnBound')) {
+            return;
+        }
+        $phone.data('sibaPhoneWarnBound', true);
+
+        var timer = null;
+        function refreshPhoneWarning() {
+            var phone = String($phone.val() || '').trim();
+            if (!phone) {
+                $warn.removeClass('is-visible').empty();
+                return;
+            }
+            $.post(admin_url + 'siba_leads/validate_phone', {
+                phonenumber: phone,
+                lead_id: getLeadModalLeadId($modal)
+            }).done(function (res) {
+                var data = res;
+                if (typeof res === 'string') {
+                    try { data = JSON.parse(res); } catch (e) { data = {}; }
                 }
-            },
-            messages: {
-                remote: window.sibaLeadsDuplicatePhone || 'A lead with this phone number already exists.'
+                // Legacy bool true/false from older endpoint
+                if (data === true || data === false) {
+                    data = { available: !!data, is_duplicate: !data };
+                }
+                if (data && data.is_duplicate) {
+                    var msg = data.message || window.sibaLeadsDuplicatePhoneWarning || window.sibaLeadsDuplicatePhone || '';
+                    var html = $('<div/>').text(msg).html();
+                    if (data.existing_id) {
+                        html += ' <a href="#" data-siba-open-lead="' + parseInt(data.existing_id, 10) + '">#' +
+                            parseInt(data.existing_id, 10) + '</a>';
+                    }
+                    $warn.html(html).addClass('is-visible');
+                } else {
+                    $warn.removeClass('is-visible').empty();
+                }
+            });
+        }
+
+        $phone.on('blur.sibaPhoneWarn change.sibaPhoneWarn', function () {
+            clearTimeout(timer);
+            timer = setTimeout(refreshPhoneWarning, 150);
+        });
+        $phone.on('keyup.sibaPhoneWarn', function () {
+            clearTimeout(timer);
+            timer = setTimeout(refreshPhoneWarning, 450);
+        });
+
+        $modal.off('click.sibaPhoneWarn', '[data-siba-open-lead]').on('click.sibaPhoneWarn', '[data-siba-open-lead]', function (e) {
+            e.preventDefault();
+            var id = parseInt($(this).attr('data-siba-open-lead'), 10);
+            if (id > 0 && typeof init_lead === 'function') {
+                init_lead(id);
             }
         });
+
+        refreshPhoneWarning();
     }
 
     $(document).on('click', '.siba-leads-kan-ban .new-lead-from-status', function () {
@@ -1201,6 +1694,7 @@
     $(document).on('hidden.bs.modal', '#lead-modal', function () {
         window.sibaLeadLocationSeed = null;
         window.sibaLeadProfileSeed = null;
+        window.sibaLeadFormMetaSeed = null;
         cleanupLocationPickerArtifacts();
     });
 

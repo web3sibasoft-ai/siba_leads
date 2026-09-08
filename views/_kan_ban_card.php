@@ -57,6 +57,28 @@ $hasMyActiveTask = $myActiveTasks > 0;
                             <?= e(_l('siba_leads_card_my_active_tasks', $myActiveTasks)); ?>
                         </span>
                         <?php } ?>
+                        <?php
+                        $phoneDup = !empty($lead['phone_duplicate']);
+                        $phoneDupOf = (int) ($lead['phone_duplicate_of'] ?? 0);
+                        if ($phoneDup) {
+                            $dupTitle = $phoneDupOf > 0
+                                ? _l('siba_leads_card_duplicate_phone_tooltip', $phoneDupOf)
+                                : _l('siba_leads_duplicate_phone_warning');
+                            ?>
+                        <span class="siba-lead-card__badge siba-lead-card__badge--duplicate"
+                            data-toggle="tooltip"
+                            title="<?= e($dupTitle); ?>">
+                            <i class="fa-solid fa-clone"></i>
+                            <?= e(_l('siba_leads_card_duplicate_phone')); ?>
+                            <?php if ($phoneDupOf > 0) { ?>
+                            <a href="<?= admin_url('leads/index/' . $phoneDupOf); ?>"
+                                class="siba-lead-card__badge-link"
+                                onclick="init_lead(<?= (int) $phoneDupOf; ?>);return false;">
+                                #<?= (int) $phoneDupOf; ?>
+                            </a>
+                            <?php } ?>
+                        </span>
+                        <?php } ?>
                     </div>
                 </div>
             </div>
@@ -102,7 +124,65 @@ $hasMyActiveTask = $myActiveTasks > 0;
                 <i class="fa-solid fa-coins"></i>
                 <?= e($lead_value); ?>
             </span>
-            <?php } ?>
+            <?php }
+            $smsRaw = (string) ($lead['sms_verification'] ?? '');
+            $smsVerified = function_exists('siba_leads_is_sms_verified')
+                ? siba_leads_is_sms_verified($smsRaw)
+                : in_array($smsRaw, ['1', 'true', 'True'], true);
+            $formIdChip = trim((string) ($lead['form_identifier'] ?? ''));
+            $formTitleChip = trim((string) ($lead['form_source_page_title'] ?? ''));
+            $requestType = trim((string) ($lead['request_type'] ?? ''));
+            $packageNo = trim((string) ($lead['user_package_number'] ?? ''));
+            $trackingId = trim((string) ($lead['demo_request_tracking_id'] ?? ''));
+            $hasFormMeta = $smsRaw !== '' || $requestType !== '' || $packageNo !== ''
+                || $trackingId !== '' || $formIdChip !== '' || $formTitleChip !== '';
+            if ($hasFormMeta) {
+                if ($smsRaw !== '') { ?>
+            <span class="siba-lead-card__chip siba-lead-card__chip--sms<?= $smsVerified ? ' is-verified' : ' is-pending'; ?>"
+                title="<?= _l('sms_verification'); ?>">
+                <i class="fa-solid fa-<?= $smsVerified ? 'check' : 'clock'; ?>"></i>
+                <?= $smsVerified ? _l('siba_leads_sms_verified') : _l('siba_leads_sms_unverified'); ?>
+            </span>
+            <?php }
+                if ($formTitleChip !== '') {
+                    $formTitleShort = mb_strlen($formTitleChip) > 22
+                        ? mb_substr($formTitleChip, 0, 20) . '…'
+                        : $formTitleChip;
+                    ?>
+            <span class="siba-lead-card__chip" title="<?= e(_l('form_source_page_title') . ': ' . $formTitleChip); ?>">
+                <i class="fa-regular fa-file-lines"></i>
+                <?= e($formTitleShort); ?>
+            </span>
+            <?php }
+                if ($requestType !== '') { ?>
+            <span class="siba-lead-card__chip" title="<?= _l('request_type'); ?>">
+                <i class="fa-solid fa-clipboard-list"></i>
+                <?= e($requestType); ?>
+            </span>
+            <?php }
+                if ($packageNo !== '') { ?>
+            <span class="siba-lead-card__chip" title="<?= _l('user_package_number'); ?>">
+                <i class="fa-solid fa-box"></i>
+                <?= e($packageNo); ?>
+            </span>
+            <?php }
+                if ($trackingId !== '') {
+                    $trackingShort = mb_strlen($trackingId) > 18
+                        ? mb_substr($trackingId, 0, 16) . '…'
+                        : $trackingId;
+                    ?>
+            <span class="siba-lead-card__chip" title="<?= e(_l('demo_request_tracking_id') . ': ' . $trackingId); ?>">
+                <i class="fa-solid fa-hashtag"></i>
+                <?= e($trackingShort); ?>
+            </span>
+            <?php }
+                if ($formIdChip !== '') { ?>
+            <span class="siba-lead-card__chip" title="<?= _l('form_identifier'); ?>">
+                <i class="fa-solid fa-fingerprint"></i>
+                <?= e($formIdChip); ?>
+            </span>
+            <?php }
+            } ?>
         </div>
 
         <?php if (!empty($lead['phonenumber']) || !empty($lead['email'])) { ?>
@@ -298,6 +378,136 @@ $hasMyActiveTask = $myActiveTasks > 0;
                     <dd><?= e($lead['zip'] != '' ? $lead['zip'] : '—'); ?></dd>
                 </div>
             </dl>
+            <?php
+            $formId = trim((string) ($lead['form_identifier'] ?? ''));
+            $formTitle = trim((string) ($lead['form_source_page_title'] ?? ''));
+            $formLink = trim((string) ($lead['form_source_link'] ?? ''));
+            $smsRawExpand = (string) ($lead['sms_verification'] ?? '');
+            $smsVerifiedExpand = function_exists('siba_leads_is_sms_verified')
+                ? siba_leads_is_sms_verified($smsRawExpand)
+                : in_array($smsRawExpand, ['1', 'true', 'True'], true);
+            $trackingExpand = trim((string) ($lead['demo_request_tracking_id'] ?? ''));
+            $packageExpand = trim((string) ($lead['user_package_number'] ?? ''));
+            $requestExpand = trim((string) ($lead['request_type'] ?? ''));
+            $descriptionMap = function_exists('siba_leads_parse_description_map')
+                ? siba_leads_parse_description_map($lead['description'] ?? '')
+                : [];
+            $descriptionMap = function_exists('siba_leads_unique_form_detail_rows')
+                ? siba_leads_unique_form_detail_rows($descriptionMap, [
+                    'form_identifier'          => $formId,
+                    'form_source_link'         => $formLink,
+                    'form_source_page_title'   => $formTitle,
+                    'demo_request_tracking_id' => $trackingExpand,
+                    'user_package_number'      => $packageExpand,
+                    'request_type'             => $requestExpand,
+                ])
+                : $descriptionMap;
+            $leadMetaRows = function_exists('siba_leads_get_lead_meta')
+                ? siba_leads_get_lead_meta((int) $lead['id'])
+                : [];
+            $hasWebsiteBlock = $formId !== '' || $formTitle !== '' || $formLink !== ''
+                || $smsRawExpand !== '' || $trackingExpand !== '' || $packageExpand !== ''
+                || $requestExpand !== '' || $descriptionMap !== [] || $leadMetaRows !== [];
+            if ($hasWebsiteBlock) { ?>
+            <div class="siba-lead-card__form-block">
+                <div class="siba-lead-card__form-title"><?= _l('siba_leads_website_form_info'); ?></div>
+                <dl class="siba-lead-card__dl siba-lead-card__dl--form">
+                <?php if ($formId !== '') { ?>
+                <div>
+                    <dt><?= _l('form_identifier'); ?></dt>
+                    <dd><?= e($formId); ?></dd>
+                </div>
+                <?php }
+                if ($trackingExpand !== '') { ?>
+                <div>
+                    <dt><?= _l('demo_request_tracking_id'); ?></dt>
+                    <dd><?= e($trackingExpand); ?></dd>
+                </div>
+                <?php }
+                if ($formTitle !== '') { ?>
+                <div>
+                    <dt><?= _l('form_source_page_title'); ?></dt>
+                    <dd><?= e($formTitle); ?></dd>
+                </div>
+                <?php }
+                if ($formLink !== '') { ?>
+                <div>
+                    <dt><?= _l('form_source_link'); ?></dt>
+                    <dd>
+                        <a href="<?= e($formLink); ?>" target="_blank" rel="noopener" dir="ltr"><?= e($formLink); ?></a>
+                    </dd>
+                </div>
+                <?php }
+                if ($smsRawExpand !== '') { ?>
+                <div>
+                    <dt><?= _l('sms_verification'); ?></dt>
+                    <dd>
+                        <span class="siba-lead-card__chip siba-lead-card__chip--sms<?= $smsVerifiedExpand ? ' is-verified' : ' is-pending'; ?>">
+                            <?= $smsVerifiedExpand ? _l('siba_leads_sms_verified') : _l('siba_leads_sms_unverified'); ?>
+                        </span>
+                    </dd>
+                </div>
+                <?php }
+                if ($packageExpand !== '') { ?>
+                <div>
+                    <dt><?= _l('user_package_number'); ?></dt>
+                    <dd><?= e($packageExpand); ?></dd>
+                </div>
+                <?php }
+                if ($requestExpand !== '') { ?>
+                <div>
+                    <dt><?= _l('request_type'); ?></dt>
+                    <dd><?= e($requestExpand); ?></dd>
+                </div>
+                <?php }
+                foreach ($descriptionMap as $metaKey => $metaVal) { ?>
+                <div>
+                    <dt><?= e((string) $metaKey); ?></dt>
+                    <dd><?php
+                        $metaVal = (string) $metaVal;
+                        if (preg_match('#^https?://#i', $metaVal)) {
+                            echo '<a href="' . e($metaVal) . '" target="_blank" rel="noopener" dir="ltr">' . e($metaVal) . '</a>';
+                        } else {
+                            echo e($metaVal);
+                        }
+                    ?></dd>
+                </div>
+                <?php }
+                $shownDescKeys = [];
+                foreach (array_keys($descriptionMap) as $shownKey) {
+                    $shownDescKeys[mb_strtolower((string) $shownKey)] = true;
+                }
+                foreach ($leadMetaRows as $metaRow) {
+                    $metaKey = trim((string) ($metaRow['meta_key'] ?? ''));
+                    $metaVal = trim((string) ($metaRow['meta_value'] ?? ''));
+                    if ($metaKey === '' || $metaVal === '') {
+                        continue;
+                    }
+                    if (isset($shownDescKeys[mb_strtolower($metaKey)])) {
+                        continue;
+                    }
+                    $filtered = function_exists('siba_leads_unique_form_detail_rows')
+                        ? siba_leads_unique_form_detail_rows([$metaKey => $metaVal], [
+                            'form_identifier'          => $formId,
+                            'form_source_link'         => $formLink,
+                            'form_source_page_title'   => $formTitle,
+                            'demo_request_tracking_id' => $trackingExpand,
+                            'user_package_number'      => $packageExpand,
+                            'request_type'             => $requestExpand,
+                        ])
+                        : [$metaKey => $metaVal];
+                    if ($filtered === []) {
+                        continue;
+                    }
+                    ?>
+                <div>
+                    <dt><?= e($metaKey); ?></dt>
+                    <dd><?= e($metaVal); ?></dd>
+                </div>
+                <?php } ?>
+                </dl>
+            </div>
+            <?php } ?>
         </div>
     </div>
 </li>

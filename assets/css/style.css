@@ -235,8 +235,43 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border: 1px solid #fdba74;
 }
 
+.siba-lead-card__badge--duplicate {
+    gap: 4px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.siba-lead-card__badge-link {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 700;
+    margin-inline-start: 2px;
+}
+
 .siba-lead-card.has-my-active-task > .siba-lead-card__body {
     border-inline-start: 3px solid #f97316;
+}
+
+.siba-lead-phone-warning {
+    display: none;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.siba-lead-phone-warning.is-visible {
+    display: block;
+}
+
+.siba-lead-phone-warning a {
+    font-weight: 600;
+    color: #b45309;
 }
 
 .siba-lead-card__expand {
@@ -296,6 +331,238 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 
 .siba-lead-card__chip--value i {
     color: #c2410c;
+}
+
+.siba-lead-card__chip--sms.is-verified {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #065f46;
+}
+
+.siba-lead-card__chip--sms.is-verified i {
+    color: #059669;
+}
+
+.siba-lead-card__chip--sms.is-pending {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+.siba-lead-card__chip--sms.is-pending i {
+    color: #d97706;
+}
+
+.siba-lead-card__form-block {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.siba-lead-card__form-title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.siba-lead-card__dl--form {
+    margin: 0;
+}
+
+.siba-lead-card__dl--form > div {
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.siba-lead-card__dl--form a,
+.siba-lead-form-meta__link {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.siba-lead-form-meta-wrap {
+    float: none !important;
+    display: block;
+    width: 100%;
+    clear: both;
+    margin-top: 10px;
+    margin-bottom: 12px;
+    padding: 0 15px;
+}
+
+.siba-lead-form-meta {
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.04);
+}
+
+.siba-lead-form-meta__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.siba-lead-form-meta__title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: inherit;
+}
+
+.siba-lead-form-meta__chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+}
+
+.siba-lead-form-meta__chips--extra {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.siba-lead-form-meta__chip {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.1);
+}
+
+.siba-lead-form-meta__chip-label {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.siba-lead-form-meta__chip-value {
+    color: inherit;
+    font-size: 13px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.siba-lead-form-meta__note {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(20, 184, 166, 0.08);
+    border: 1px solid rgba(20, 184, 166, 0.22);
+}
+
+.siba-lead-form-meta__note-label {
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #0f766e;
+}
+
+.siba-lead-form-meta__note-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: inherit;
+}
+
+.siba-lead-form-meta__dl {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+}
+
+.siba-lead-form-meta__dl--compact {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.siba-lead-form-meta__row {
+    display: grid;
+    grid-template-columns: minmax(90px, 36%) 1fr;
+    gap: 8px 10px;
+    align-items: center;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: rgba(148, 163, 184, 0.08);
+}
+
+.siba-lead-form-meta__dl dt {
+    margin: 0;
+    color: #64748b;
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.siba-lead-form-meta__dl dd {
+    margin: 0;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.siba-lead-form-meta__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.siba-lead-form-meta__badge.is-verified {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.siba-lead-form-meta__badge.is-pending {
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.siba-lead-form-meta__section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.45);
+}
+
+.siba-lead-form-meta__section-title {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.85;
+}
+
+.siba-lead-card__dl--form a,
+.siba-lead-form-meta__link {
+    display: inline-block;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+#lead-modal #leadViewWrapper .lead-name,
+#lead-modal #leadViewWrapper a[href^="mailto:"],
+#lead-modal #leadViewWrapper a[href^="tel:"] {
+    direction: ltr;
+    unicode-bidi: isolate;
 }
 
 .siba-lead-card__contacts {
