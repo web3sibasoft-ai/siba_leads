@@ -35,6 +35,8 @@ function siba_leads_website_native_meta_keys(): array
         'demo_request_tracking_id',
         'user_package_number',
         'request_type',
+        'form_title',
+        'job_id',
         // Common Persian labels from website description JSON
         'شناسه پیگیری',
         'شناسه پیگیری درخواست فرم',
@@ -210,6 +212,8 @@ function siba_leads_website_duplicate_detail_keys(): array
         'sms_verification',
         'user_package_number',
         'request_type',
+        'form_title',
+        'job_id',
         'package',
         'شماره بسته',
         'شماره بسته کاربر',

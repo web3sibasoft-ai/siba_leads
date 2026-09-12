@@ -126,6 +126,8 @@ function siba_leads_lead_extra_columns(): array
         'demo_request_tracking_id'  => "varchar(150) NULL DEFAULT ''",
         'user_package_number'       => "varchar(150) NULL DEFAULT ''",
         'request_type'              => "varchar(150) NULL DEFAULT ''",
+        'form_title'                => "varchar(255) NULL DEFAULT ''",
+        'job_id'                    => 'INT(11) NOT NULL DEFAULT 0',
     ];
 }
 
