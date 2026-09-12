@@ -68,6 +68,7 @@ $lang['user_package_number'] = 'User package number';
 $lang['request_type'] = 'Request type';
 $lang['form_title'] = 'Form title';
 $lang['job_id'] = 'Job ID';
+$lang['ref_code'] = 'Ref code';
 $lang['siba_leads_sms_verified'] = 'SMS verified';
 $lang['siba_leads_sms_unverified'] = 'SMS pending';
 $lang['siba_leads_website_form_info'] = 'Website form info';

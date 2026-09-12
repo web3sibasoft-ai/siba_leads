@@ -128,6 +128,7 @@ function siba_leads_lead_extra_columns(): array
         'request_type'              => "varchar(150) NULL DEFAULT ''",
         'form_title'                => "varchar(255) NULL DEFAULT ''",
         'job_id'                    => 'INT(11) NOT NULL DEFAULT 0',
+        'ref_code'                  => "varchar(150) NULL DEFAULT ''",
     ];
 }
 

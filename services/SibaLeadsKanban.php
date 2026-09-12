@@ -44,6 +44,7 @@ class SibaLeadsKanban extends LeadsKanban
             'request_type',
             'form_title',
             'job_id',
+            'ref_code',
         ];
         foreach ($formMetaColumns as $column) {
             if ($this->ci->db->field_exists($column, db_prefix() . 'leads')) {

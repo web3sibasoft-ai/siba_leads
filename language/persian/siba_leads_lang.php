@@ -68,6 +68,7 @@ $lang['user_package_number'] = 'شماره بسته کاربر';
 $lang['request_type'] = 'نوع درخواست';
 $lang['form_title'] = 'عنوان فرم';
 $lang['job_id'] = 'شناسه شغل';
+$lang['ref_code'] = 'کد مرجع';
 $lang['siba_leads_sms_verified'] = 'پیامک تایید شد';
 $lang['siba_leads_sms_unverified'] = 'در انتظار پیامک';
 $lang['siba_leads_website_form_info'] = 'اطلاعات فرم وب‌سایت';
