@@ -756,6 +756,18 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     cursor: default;
 }
 
+.siba-lead-card__order-btn--incomplete {
+    border-color: #fcd34d;
+    background: #fffbeb;
+    color: #b45309;
+}
+
+.siba-lead-card__order-btn--incomplete:hover,
+.siba-lead-card__order-btn--incomplete:focus {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 /* Backlog column */
 .siba-leads-kan-ban .siba-backlog-col .panel-heading {
     background: #475569 !important;
@@ -789,6 +801,11 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 #lead-modal .modal-dialog {
     margin-top: 24px;
     margin-bottom: 24px;
+}
+
+/* Keep Jalali birth-date popup above the lead modal layers */
+body.modal-open .datepicker-plot-area {
+    z-index: 10600 !important;
 }
 
 #lead-modal .modal-content {

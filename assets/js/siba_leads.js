@@ -824,6 +824,7 @@
             nationalCode: 'National ID',
             position: 'Position',
             jobGroup: 'Job group',
+            birthDate: 'Birthday',
             select: 'Select'
         };
     }
@@ -1304,6 +1305,7 @@
         }
 
         var nationalCode = seed ? (seed.national_code || '') : ($modal.find('#siba_lead_national_code').val() || '');
+        var birthDate = seed ? (seed.birth_date || '') : ($modal.find('#siba_lead_birth_date').val() || '');
         var jobGroupName = seed ? (seed.job_group_name || '') : ($modal.find('#siba_lead_job_group_id option:selected').text() || '');
         var positionName = seed ? (seed.position_name || seed.title || '') : ($modal.find('#siba_lead_position_id option:selected').text() || '');
 
@@ -1318,6 +1320,9 @@
             if (selectedGroup && selectedGroup !== labels.select) {
                 jobGroupName = selectedGroup;
             }
+        }
+        if ($modal.find('#siba_lead_birth_date').length) {
+            birthDate = $modal.find('#siba_lead_birth_date').val() || birthDate;
         }
 
         var $titleDt = $col.find('dt.lead-field-heading').filter(function () {
@@ -1351,7 +1356,134 @@
         }
 
         ensureViewField('national_code', labels.nationalCode, nationalCode);
+        ensureViewField('birth_date', labels.birthDate, birthDate);
         ensureViewField('job_group', labels.jobGroup, jobGroupName);
+    }
+
+    function ensureLeadBirthDateField($form, seed) {
+        var $existing = $form.find('#siba_lead_birth_date');
+        if ($existing.length) {
+            $existing
+                .removeClass('datepicker datetimepicker xdsoft_input')
+                .addClass('siba-lead-birth-datepicker')
+                .attr('autocomplete', 'off');
+            return $existing;
+        }
+
+        var labels = getProfileLabels();
+        var $nationalGroup = $form.find('#siba_lead_national_code').closest('.form-group');
+        var $birthGroup = $('<div class="form-group siba-lead-profile-birth-date"></div>');
+        $birthGroup.append('<label class="control-label">' + labels.birthDate + '</label>');
+        var $birthInput = $('<input>', {
+            type: 'text',
+            id: 'siba_lead_birth_date',
+            name: 'birth_date',
+            class: 'form-control siba-lead-birth-datepicker',
+            value: seed ? (seed.birth_date || '') : ''
+        }).attr('autocomplete', 'off');
+        $birthGroup.append($birthInput);
+
+        if ($nationalGroup.length) {
+            $birthGroup.insertAfter($nationalGroup);
+        } else {
+            var $companyGroup = $form.find('input[name="company"]').closest('.form-group');
+            if ($companyGroup.length) {
+                $birthGroup.insertAfter($companyGroup);
+            } else {
+                $form.find('.col-md-6').first().append($birthGroup);
+            }
+        }
+
+        return $birthInput;
+    }
+
+    function toLatinDigits(value) {
+        return String(value || '').replace(/[۰-۹]/g, function (d) {
+            return String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+        }).replace(/[٠-٩]/g, function (d) {
+            return String('٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+        });
+    }
+
+    function isJalaliYmd(value) {
+        var m = toLatinDigits(value).trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+        if (!m) {
+            return false;
+        }
+        var y = parseInt(m[1], 10);
+        return y >= 1200 && y < 1600;
+    }
+
+    function destroyLeadBirthPerfexPicker($input) {
+        try {
+            if (typeof $input.datetimepicker === 'function') {
+                $input.datetimepicker('destroy');
+            }
+        } catch (e) { /* ignore */ }
+        $input
+            .removeClass('datepicker datetimepicker xdsoft_input')
+            .off('.xdsoft')
+            .removeData('xdsoft_datetimepicker')
+            .removeAttr('data-xdsoft-datetimepicker');
+        $input.parents('.form-group').find('.calendar-icon').off('click');
+    }
+
+    function destroyLeadBirthPersianPicker($input) {
+        var instance = $input.data('sibaPd') || $input.data('datepicker');
+        if (instance && typeof instance.destroy === 'function') {
+            try { instance.destroy(); } catch (e) { /* ignore */ }
+        }
+        $input.removeData('sibaPd').removeData('datepicker').removeData('sibaJalaliInit');
+        $input.off('.pwt').removeClass('pwt-datepicker-input-element');
+    }
+
+    function initLeadBirthDatePicker($input, attempt) {
+        if (!$input || !$input.length) {
+            return;
+        }
+        if (typeof $.fn.persianDatepicker !== 'function') {
+            attempt = attempt || 0;
+            if (attempt < 20) {
+                setTimeout(function () {
+                    initLeadBirthDatePicker($input, attempt + 1);
+                }, 100);
+            }
+            return;
+        }
+
+        destroyLeadBirthPerfexPicker($input);
+        destroyLeadBirthPersianPicker($input);
+
+        var raw = toLatinDigits($input.val()).trim();
+        var hasValue = !!raw;
+        var valueType = 'persian';
+        var display = raw.replace(/-/g, '/');
+
+        if (hasValue && isJalaliYmd(display)) {
+            valueType = 'persian';
+        } else if (hasValue) {
+            // Gregorian SQL/view → let library convert into Jalali calendar
+            valueType = 'gregorian';
+        }
+
+        if (hasValue && display) {
+            $input.val(display);
+            $input.attr('value', display);
+        }
+
+        $input.attr('autocomplete', 'off');
+        var pd = $input.persianDatepicker({
+            format: 'YYYY/MM/DD',
+            initialValue: hasValue,
+            initialValueType: valueType,
+            calendarType: 'persian',
+            autoClose: true,
+            observer: false,
+            persianDigit: false,
+            toolbox: { calendarSwitch: { enabled: false } }
+        });
+        $input.data('sibaPd', pd);
+        $input.data('sibaJalaliInit', true);
     }
 
     function injectLeadProfileFields($modal) {
@@ -1361,6 +1493,7 @@
         }
 
         if ($form.find('#siba_lead_national_code').length) {
+            ensureLeadBirthDateField($form, window.sibaLeadProfileSeed || null);
             refreshLeadProfilePickers($modal);
             updateLeadProfileView($modal);
             return;
@@ -1405,6 +1538,17 @@
         });
         $nationalGroup.append($nationalInput);
 
+        var $birthGroup = $('<div class="form-group siba-lead-profile-birth-date"></div>');
+        $birthGroup.append('<label class="control-label">' + labels.birthDate + '</label>');
+        var $birthInput = $('<input>', {
+            type: 'text',
+            id: 'siba_lead_birth_date',
+            name: 'birth_date',
+            class: 'form-control siba-lead-birth-datepicker',
+            value: seed ? (seed.birth_date || '') : ''
+        }).attr('autocomplete', 'off');
+        $birthGroup.append($birthInput);
+
         var $jobGroupWrap = $('<div class="form-group siba-lead-profile-job-group"></div>');
         $jobGroupWrap.append('<label class="control-label">' + labels.jobGroup + '</label>');
         var $jobGroupSelect = $('<select>', {
@@ -1418,9 +1562,13 @@
 
         if ($companyGroup.length) {
             $nationalGroup.insertAfter($companyGroup);
-            $jobGroupWrap.insertAfter($nationalGroup);
+            $birthGroup.insertAfter($nationalGroup);
+            $jobGroupWrap.insertAfter($birthGroup);
         } else {
-            $form.find('.col-md-6').first().append($nationalGroup).append($jobGroupWrap);
+            $form.find('.col-md-6').first()
+                .append($nationalGroup)
+                .append($birthGroup)
+                .append($jobGroupWrap);
         }
 
         mountLocationSelectpicker($positionSelect);
@@ -1436,6 +1584,10 @@
         });
 
         $nationalInput.on('input.sibaProfile change.sibaProfile', function () {
+            updateLeadProfileView($modal);
+        });
+
+        $birthInput.on('change.sibaProfile blur.sibaProfile', function () {
             updateLeadProfileView($modal);
         });
 
@@ -1457,6 +1609,7 @@
         var $position = $form.find('#siba_lead_position_id');
         var $jobGroup = $form.find('#siba_lead_job_group_id');
         var $national = $form.find('#siba_lead_national_code');
+        var $birth = ensureLeadBirthDateField($form, seed);
 
         if (!$position.length) {
             return;
@@ -1465,6 +1618,9 @@
         if (seed) {
             if (!$national.val() && seed.national_code) {
                 $national.val(seed.national_code);
+            }
+            if ($birth.length && !$birth.val() && seed.birth_date) {
+                $birth.val(seed.birth_date);
             }
             if (!$position.val() && seed.position_id) {
                 $position.selectpicker('val', String(seed.position_id));
@@ -1476,6 +1632,7 @@
 
         mountLocationSelectpicker($position);
         mountLocationSelectpicker($jobGroup);
+        initLeadBirthDatePicker($birth);
         syncLeadProfileTitle($form);
     }
 
@@ -1901,6 +2058,7 @@
 
     $(function () {
         bindSibaKanbanRefreshOverride();
+        bindSibaLeadOrderCompleteness();
 
         if (typeof window.lead_profile_form_handler === 'function') {
             bindSibaLeadFormSaveSync();
@@ -1918,4 +2076,53 @@
             }
         }, 100);
     });
+
+    window.siba_leads_prompt_complete_lead = function (leadId, message) {
+        leadId = parseInt(leadId, 10) || 0;
+        if (message) {
+            if (typeof alert_float === 'function') {
+                alert_float('warning', message);
+            } else {
+                alert(message);
+            }
+        }
+        if (leadId > 0 && typeof init_lead === 'function') {
+            init_lead(leadId, true);
+        }
+    };
+
+    function bindSibaLeadOrderCompleteness() {
+        if (window.sibaLeadsOrderCompletenessBound) {
+            return;
+        }
+        window.sibaLeadsOrderCompletenessBound = true;
+
+        $(document).on('click', '[data-siba-complete-lead]', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var id = parseInt($(this).attr('data-siba-complete-lead'), 10) || 0;
+            var msg = $(this).attr('data-siba-missing') || '';
+            window.siba_leads_prompt_complete_lead(id, msg);
+            return false;
+        });
+
+        try {
+            var params = new URLSearchParams(window.location.search || '');
+            var openLead = parseInt(params.get('open_lead') || '0', 10) || 0;
+            var editMode = params.get('edit') === '1';
+            if (openLead > 0 && typeof init_lead === 'function') {
+                window.setTimeout(function () {
+                    init_lead(openLead, editMode);
+                }, 400);
+                if (window.history && window.history.replaceState) {
+                    params.delete('open_lead');
+                    params.delete('edit');
+                    var next = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                    window.history.replaceState({}, document.title, next);
+                }
+            }
+        } catch (err) {
+            // ignore
+        }
+    }
 })();

@@ -90,7 +90,8 @@ function siba_leads_get_position_name($position_id): string
  *   job_group_name:string,
  *   position_id:int,
  *   position_name:string,
- *   title:string
+ *   title:string,
+ *   birth_date:string
  * }
  */
 function siba_leads_resolve_lead_profile($lead): array
@@ -99,17 +100,36 @@ function siba_leads_resolve_lead_profile($lead): array
     $job_group_id  = 0;
     $position_id   = 0;
     $title         = '';
+    $birth_date    = '';
 
     if (is_object($lead)) {
         $national_code = trim((string) ($lead->national_code ?? ''));
         $job_group_id  = (int) ($lead->job_group_id ?? 0);
         $position_id   = (int) ($lead->position_id ?? 0);
         $title         = trim((string) ($lead->title ?? ''));
+        $birth_date    = trim((string) ($lead->birth_date ?? ''));
     } elseif (is_array($lead)) {
         $national_code = trim((string) ($lead['national_code'] ?? ''));
         $job_group_id  = (int) ($lead['job_group_id'] ?? 0);
         $position_id   = (int) ($lead['position_id'] ?? 0);
         $title         = trim((string) ($lead['title'] ?? ''));
+        $birth_date    = trim((string) ($lead['birth_date'] ?? ''));
+    }
+
+    if ($birth_date === '0000-00-00' || $birth_date === '0000-00-00 00:00:00') {
+        $birth_date = '';
+    }
+
+    if ($birth_date !== '' && function_exists('to_view_date_custom')) {
+        $viewDate = to_view_date_custom($birth_date);
+        if (!empty($viewDate)) {
+            $birth_date = $viewDate;
+        }
+    } elseif ($birth_date !== '' && function_exists('to_view_date')) {
+        $viewDate = to_view_date($birth_date);
+        if (!empty($viewDate)) {
+            $birth_date = $viewDate;
+        }
     }
 
     $position_name = $position_id > 0 ? siba_leads_get_position_name($position_id) : $title;
@@ -124,6 +144,7 @@ function siba_leads_resolve_lead_profile($lead): array
         'position_id'    => $position_id,
         'position_name'  => $position_name,
         'title'          => $title,
+        'birth_date'     => $birth_date,
     ];
 }
 
@@ -136,6 +157,25 @@ function siba_leads_sync_profile_fields(array $data): array
     $data['national_code'] = trim((string) ($data['national_code'] ?? ''));
     $data['job_group_id']  = (int) ($data['job_group_id'] ?? 0);
     $data['position_id']   = (int) ($data['position_id'] ?? 0);
+    $data['birth_date']    = trim((string) ($data['birth_date'] ?? ''));
+
+    if ($data['birth_date'] === '0000-00-00' || $data['birth_date'] === '0000-00-00 00:00:00') {
+        $data['birth_date'] = '';
+    }
+
+    if ($data['birth_date'] !== '') {
+        if (function_exists('to_sql_date_custom')) {
+            $sqlDate = to_sql_date_custom($data['birth_date']);
+            if (!empty($sqlDate)) {
+                $data['birth_date'] = $sqlDate;
+            }
+        } elseif (function_exists('to_sql_date')) {
+            $sqlDate = to_sql_date($data['birth_date']);
+            if (!empty($sqlDate)) {
+                $data['birth_date'] = $sqlDate;
+            }
+        }
+    }
 
     if ($data['position_id'] > 0) {
         $position_name = siba_leads_get_position_name($data['position_id']);
@@ -201,6 +241,7 @@ function siba_leads_persist_profile_on_save($lead_id): void
         'job_group_id'  => (int) ($data['job_group_id'] ?? 0),
         'position_id'   => (int) ($data['position_id'] ?? 0),
         'title'         => (string) ($data['title'] ?? ''),
+        'birth_date'    => (string) ($data['birth_date'] ?? ''),
     ]);
 }
 
@@ -217,4 +258,178 @@ function siba_leads_filter_profile_fields($data)
     }
 
     return siba_leads_sync_profile_fields($data);
+}
+
+/**
+ * Customer-profile fields a lead must have before an order can be placed.
+ * Mirrors the new-customer form (Perfex + Siba extras) that map onto leads.
+ *
+ * @return array<string, array{label:string,type:string}>
+ */
+function siba_leads_order_required_field_defs(): array
+{
+    $fields = [
+        'name' => [
+            'label' => _l('lead_add_edit_name'),
+            'type'  => 'text',
+        ],
+        'phonenumber' => [
+            'label' => _l('lead_add_edit_phonenumber'),
+            'type'  => 'text',
+        ],
+        'email' => [
+            'label' => _l('lead_add_edit_email'),
+            'type'  => 'email',
+        ],
+        'address' => [
+            'label' => _l('lead_address'),
+            'type'  => 'text',
+        ],
+        'province_id' => [
+            'label' => _l('siba_leads_province'),
+            'type'  => 'id',
+        ],
+        'city_id' => [
+            'label' => _l('siba_leads_city'),
+            'type'  => 'id',
+        ],
+        'national_code' => [
+            'label' => _l('siba_leads_national_code'),
+            'type'  => 'text',
+        ],
+        'birth_date' => [
+            'label' => _l('birth_date'),
+            'type'  => 'text',
+        ],
+        'job_group_id' => [
+            'label' => _l('siba_leads_job_group'),
+            'type'  => 'id',
+        ],
+        'position_id' => [
+            'label' => _l('siba_leads_position'),
+            'type'  => 'position',
+        ],
+    ];
+
+    if (get_option('company_is_required') == 1) {
+        $fields = array_merge([
+            'company' => [
+                'label' => _l('lead_company'),
+                'type'  => 'text',
+            ],
+        ], $fields);
+    }
+
+    return $fields;
+}
+
+/**
+ * @param object|array|null $lead
+ * @return array{ok:bool,missing:array<int,array{key:string,label:string}>,missing_labels:array<int,string>}
+ */
+function siba_leads_lead_order_readiness($lead): array
+{
+    $empty = [
+        'ok'             => false,
+        'missing'        => [],
+        'missing_labels' => [],
+    ];
+
+    if ($lead === null) {
+        return $empty;
+    }
+
+    $get = static function ($key) use ($lead) {
+        if (is_array($lead)) {
+            return $lead[$key] ?? null;
+        }
+
+        return $lead->{$key} ?? null;
+    };
+
+    $location = function_exists('siba_leads_resolve_lead_location')
+        ? siba_leads_resolve_lead_location($lead)
+        : [
+            'province_id' => (int) $get('province_id'),
+            'city_id'     => (int) $get('city_id'),
+        ];
+
+    $values = [
+        'name'          => trim((string) ($get('name') ?? $get('lead_name') ?? '')),
+        'company'       => trim((string) ($get('company') ?? '')),
+        'phonenumber'   => trim((string) ($get('phonenumber') ?? '')),
+        'email'         => trim((string) ($get('email') ?? '')),
+        'address'       => trim((string) ($get('address') ?? '')),
+        'province_id'   => (int) ($location['province_id'] ?? 0),
+        'city_id'       => (int) ($location['city_id'] ?? 0),
+        'national_code' => trim((string) ($get('national_code') ?? '')),
+        'birth_date'    => trim((string) ($get('birth_date') ?? '')),
+        'job_group_id'  => (int) ($get('job_group_id') ?? 0),
+        'position_id'   => (int) ($get('position_id') ?? 0),
+        'title'         => trim((string) ($get('title') ?? '')),
+    ];
+
+    if ($values['birth_date'] === '0000-00-00' || $values['birth_date'] === '0000-00-00 00:00:00') {
+        $values['birth_date'] = '';
+    }
+
+    $missing = [];
+    foreach (siba_leads_order_required_field_defs() as $key => $def) {
+        $type  = $def['type'];
+        $label = $def['label'];
+        $ok    = true;
+
+        if ($type === 'id') {
+            $ok = ((int) ($values[$key] ?? 0)) > 0;
+        } elseif ($type === 'position') {
+            $ok = ((int) $values['position_id'] > 0) || $values['title'] !== '';
+        } elseif ($type === 'email') {
+            $email = $values['email'];
+            $ok    = $email !== ''
+                && filter_var($email, FILTER_VALIDATE_EMAIL)
+                && strpos($email, '@converted.siba.local') === false;
+        } else {
+            $ok = trim((string) ($values[$key] ?? '')) !== '';
+        }
+
+        if (!$ok) {
+            $missing[] = [
+                'key'   => $key,
+                'label' => $label,
+            ];
+        }
+    }
+
+    $labels = array_values(array_map(static function ($row) {
+        return $row['label'];
+    }, $missing));
+
+    return [
+        'ok'             => $missing === [],
+        'missing'        => $missing,
+        'missing_labels' => $labels,
+    ];
+}
+
+/**
+ * @param int|string $lead_id
+ * @return array{ok:bool,missing:array<int,array{key:string,label:string}>,missing_labels:array<int,string>}
+ */
+function siba_leads_lead_order_readiness_by_id($lead_id): array
+{
+    $lead_id = (int) $lead_id;
+    if ($lead_id < 1) {
+        return [
+            'ok'             => false,
+            'missing'        => [],
+            'missing_labels' => [],
+        ];
+    }
+
+    $CI = &get_instance();
+    if (!class_exists('leads_model', false)) {
+        $CI->load->model('leads_model');
+    }
+
+    return siba_leads_lead_order_readiness($CI->leads_model->get($lead_id));
 }

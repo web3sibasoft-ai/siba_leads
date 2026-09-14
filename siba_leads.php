@@ -241,7 +241,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260908f') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260914d') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -283,6 +283,7 @@ function siba_leads_load_admin_js()
         'nationalCode' => _l('siba_leads_national_code'),
         'position'     => _l('siba_leads_position'),
         'jobGroup'     => _l('siba_leads_job_group'),
+        'birthDate'    => _l('birth_date'),
         'select'       => _l('dropdown_non_selected_tex'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsFormMetaLabels = ' . json_encode([
@@ -303,7 +304,7 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadPositions = ' . json_encode($positions, JSON_UNESCAPED_UNICODE) . ';</script>';
     $defaultCountryId = function_exists('siba_leads_default_country_id') ? siba_leads_default_country_id() : 0;
     echo '<script>window.sibaLeadsDefaultCountryId = ' . (int) $defaultCountryId . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260908g') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260914d') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

@@ -302,7 +302,30 @@ $hasMyActiveTask = $myActiveTasks > 0;
                 $lead_order_url = ($lead_is_client && !empty($lead['client_userid']))
                     ? admin_url('siba_license/show_add_orders/' . (int) $lead['client_userid'])
                     : admin_url('siba_license/show_add_orders/' . (int) $lead['id'] . '/lead');
+                $orderReady = true;
+                $missingLabels = [];
+                if (!$lead_is_client && function_exists('siba_leads_lead_order_readiness')) {
+                    $readiness = siba_leads_lead_order_readiness($lead);
+                    $orderReady = !empty($readiness['ok']);
+                    $missingLabels = $readiness['missing_labels'] ?? [];
+                }
+                if (!$orderReady) {
+                    $missingText = implode('، ', $missingLabels);
+                    $incompleteMsg = $missingText !== ''
+                        ? _l('siba_leads_order_incomplete', $missingText)
+                        : _l('siba_leads_order_incomplete_short');
         ?>
+        <a href="#"
+            class="siba-lead-card__order-btn siba-lead-card__order-btn--incomplete"
+            data-siba-complete-lead="<?= (int) $lead['id']; ?>"
+            data-siba-missing="<?= e($incompleteMsg); ?>"
+            onclick="event.stopPropagation(); if (typeof siba_leads_prompt_complete_lead === 'function') { siba_leads_prompt_complete_lead(<?= (int) $lead['id']; ?>, this.getAttribute('data-siba-missing')); } else if (typeof init_lead === 'function') { init_lead(<?= (int) $lead['id']; ?>, true); } return false;"
+            onmousedown="event.stopPropagation();"
+            title="<?= e($incompleteMsg); ?>">
+            <i class="fa fa-user-edit"></i>
+            <span><?= _l('siba_leads_card_complete_lead'); ?></span>
+        </a>
+        <?php } else { ?>
         <a href="<?= e($lead_order_url); ?>"
             class="siba-lead-card__order-btn"
             onclick="event.stopPropagation();"
@@ -312,6 +335,7 @@ $hasMyActiveTask = $myActiveTasks > 0;
             <span><?= _l('siba_leads_card_add_order'); ?></span>
         </a>
         <?php }
+            }
             }
         } ?>
 

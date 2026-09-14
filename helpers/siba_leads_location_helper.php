@@ -264,7 +264,7 @@ function siba_leads_intercept_lead_location_post(): void
         $post = siba_leads_sync_profile_fields($post);
     }
 
-    $patchKeys = ['province_id', 'city_id', 'state', 'city', 'country', 'national_code', 'job_group_id', 'position_id', 'title'];
+    $patchKeys = ['province_id', 'city_id', 'state', 'city', 'country', 'national_code', 'job_group_id', 'position_id', 'title', 'birth_date'];
     foreach ($patchKeys as $key) {
         if (array_key_exists($key, $post)) {
             $_POST[$key] = $post[$key];
@@ -272,7 +272,7 @@ function siba_leads_intercept_lead_location_post(): void
     }
 
     $table = db_prefix() . 'leads';
-    foreach (['province_id', 'city_id', 'national_code', 'job_group_id', 'position_id'] as $column) {
+    foreach (['province_id', 'city_id', 'national_code', 'job_group_id', 'position_id', 'birth_date'] as $column) {
         if (isset($_POST[$column]) && !$CI->db->field_exists($column, $table)) {
             unset($_POST[$column]);
         }
