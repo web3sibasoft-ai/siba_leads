@@ -277,10 +277,6 @@ function siba_leads_order_required_field_defs(): array
             'label' => _l('lead_add_edit_phonenumber'),
             'type'  => 'text',
         ],
-        'email' => [
-            'label' => _l('lead_add_edit_email'),
-            'type'  => 'email',
-        ],
         'address' => [
             'label' => _l('lead_address'),
             'type'  => 'text',
@@ -292,14 +288,6 @@ function siba_leads_order_required_field_defs(): array
         'city_id' => [
             'label' => _l('siba_leads_city'),
             'type'  => 'id',
-        ],
-        'national_code' => [
-            'label' => _l('siba_leads_national_code'),
-            'type'  => 'text',
-        ],
-        'birth_date' => [
-            'label' => _l('birth_date'),
-            'type'  => 'text',
         ],
         'job_group_id' => [
             'label' => _l('siba_leads_job_group'),
@@ -355,23 +343,16 @@ function siba_leads_lead_order_readiness($lead): array
         ];
 
     $values = [
-        'name'          => trim((string) ($get('name') ?? $get('lead_name') ?? '')),
-        'company'       => trim((string) ($get('company') ?? '')),
-        'phonenumber'   => trim((string) ($get('phonenumber') ?? '')),
-        'email'         => trim((string) ($get('email') ?? '')),
-        'address'       => trim((string) ($get('address') ?? '')),
-        'province_id'   => (int) ($location['province_id'] ?? 0),
-        'city_id'       => (int) ($location['city_id'] ?? 0),
-        'national_code' => trim((string) ($get('national_code') ?? '')),
-        'birth_date'    => trim((string) ($get('birth_date') ?? '')),
-        'job_group_id'  => (int) ($get('job_group_id') ?? 0),
-        'position_id'   => (int) ($get('position_id') ?? 0),
-        'title'         => trim((string) ($get('title') ?? '')),
+        'name'         => trim((string) ($get('name') ?? $get('lead_name') ?? '')),
+        'company'      => trim((string) ($get('company') ?? '')),
+        'phonenumber'  => trim((string) ($get('phonenumber') ?? '')),
+        'address'      => trim((string) ($get('address') ?? '')),
+        'province_id'  => (int) ($location['province_id'] ?? 0),
+        'city_id'      => (int) ($location['city_id'] ?? 0),
+        'job_group_id' => (int) ($get('job_group_id') ?? 0),
+        'position_id'  => (int) ($get('position_id') ?? 0),
+        'title'        => trim((string) ($get('title') ?? '')),
     ];
-
-    if ($values['birth_date'] === '0000-00-00' || $values['birth_date'] === '0000-00-00 00:00:00') {
-        $values['birth_date'] = '';
-    }
 
     $missing = [];
     foreach (siba_leads_order_required_field_defs() as $key => $def) {
@@ -383,11 +364,6 @@ function siba_leads_lead_order_readiness($lead): array
             $ok = ((int) ($values[$key] ?? 0)) > 0;
         } elseif ($type === 'position') {
             $ok = ((int) $values['position_id'] > 0) || $values['title'] !== '';
-        } elseif ($type === 'email') {
-            $email = $values['email'];
-            $ok    = $email !== ''
-                && filter_var($email, FILTER_VALIDATE_EMAIL)
-                && strpos($email, '@converted.siba.local') === false;
         } else {
             $ok = trim((string) ($values[$key] ?? '')) !== '';
         }

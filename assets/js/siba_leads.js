@@ -829,6 +829,53 @@
         };
     }
 
+    function getOrderRequiredFields() {
+        return Array.isArray(window.sibaLeadsOrderRequiredFields)
+            ? window.sibaLeadsOrderRequiredFields
+            : [];
+    }
+
+    function appendOrderRequiredStar($label) {
+        if (!$label || !$label.length || $label.find('.siba-leads-order-req-star').length) {
+            return;
+        }
+        var title = window.sibaLeadsOrderRequiredStarTitle || '';
+        $label.append(
+            $('<span>', {
+                class: 'siba-leads-order-req-star',
+                text: '*',
+                title: title
+            })
+        );
+    }
+
+    /**
+     * Purple * on labels for fields required to place a Siba order.
+     */
+    function markLeadOrderRequiredFields($modal) {
+        var fields = getOrderRequiredFields();
+        if (!fields.length) {
+            return;
+        }
+        var $scope = $modal.find('#lead_form, .lead-wrapper, #tab_lead_profile');
+        fields.forEach(function (name) {
+            var $field = $scope.find('[name="' + name + '"]').filter(':visible, select, input, textarea').first();
+            if (!$field.length) {
+                $field = $scope.find('[name="' + name + '"]').first();
+            }
+            if (!$field.length) {
+                return;
+            }
+            var $group = $field.closest('.form-group');
+            var $label = $group.find('label.control-label').first();
+            if (!$label.length && $field.attr('id')) {
+                $label = $scope.find('label[for="' + $field.attr('id') + '"]').first();
+            }
+            appendOrderRequiredStar($label);
+            $group.addClass('siba-leads-order-required-field');
+        });
+    }
+
     function getFormMetaLabels() {
         return window.sibaLeadsFormMetaLabels || {
             title: 'Website form info',
@@ -1723,6 +1770,7 @@
         hideEmptyProfileDashes($modal);
         bindLeadPhoneUnique($modal);
         ensureLeadModalSelectsEnabled($modal);
+        markLeadOrderRequiredFields($modal);
 
         // Proposals not used for now — hide tab + pane.
         $modal.find('a[href="#tab_proposals_leads"]').closest('li').addClass('siba-hide-lead-field');

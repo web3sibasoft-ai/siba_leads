@@ -241,7 +241,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260914d') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260915a') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -304,7 +304,15 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadPositions = ' . json_encode($positions, JSON_UNESCAPED_UNICODE) . ';</script>';
     $defaultCountryId = function_exists('siba_leads_default_country_id') ? siba_leads_default_country_id() : 0;
     echo '<script>window.sibaLeadsDefaultCountryId = ' . (int) $defaultCountryId . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260914d') . '"></script>';
+
+    $orderRequiredFields = [];
+    if (function_exists('siba_leads_order_required_field_defs')) {
+        $orderRequiredFields = array_keys(siba_leads_order_required_field_defs());
+    }
+    echo '<script>window.sibaLeadsOrderRequiredFields = ' . json_encode(array_values($orderRequiredFields), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsOrderRequiredStarTitle = ' . json_encode(_l('siba_leads_order_required_star'), JSON_UNESCAPED_UNICODE) . ';</script>';
+
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260915a') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

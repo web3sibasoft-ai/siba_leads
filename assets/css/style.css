@@ -1163,6 +1163,16 @@ body.modal-open .datepicker-plot-area {
     opacity: 1;
 }
 
+/* Purple star: fields required before placing a Siba order */
+#lead-modal .siba-leads-order-req-star,
+.lead-wrapper .siba-leads-order-req-star {
+    color: #7c3aed;
+    font-weight: 700;
+    margin-inline-start: 4px;
+    font-size: 1.05em;
+    line-height: 1;
+}
+
 #lead-modal .lead-edit .input-group-select {
     width: 100%;
     max-width: 100%;

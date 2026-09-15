@@ -43,6 +43,7 @@ $lang['siba_leads_card_add_order'] = 'ثبت سفارش';
 $lang['siba_leads_card_complete_lead'] = 'تکمیل اطلاعات لید';
 $lang['siba_leads_order_incomplete'] = 'قبل از ثبت سفارش، این فیلدها را در پروفایل لید تکمیل کنید: %s';
 $lang['siba_leads_order_incomplete_short'] = 'اطلاعات لید برای ثبت سفارش کامل نیست. ابتدا پروفایل لید را تکمیل کنید.';
+$lang['siba_leads_order_required_star'] = 'الزامی برای ثبت سفارش';
 $lang['siba_leads_card_has_order'] = 'دارای سفارش';
 $lang['siba_leads_card_awaiting_payment'] = 'در انتظار پرداخت';
 $lang['siba_leads_card_mark_paid'] = 'ثبت پرداخت';

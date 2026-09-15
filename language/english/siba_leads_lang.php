@@ -43,6 +43,7 @@ $lang['siba_leads_card_add_order'] = 'Add order';
 $lang['siba_leads_card_complete_lead'] = 'Complete lead profile';
 $lang['siba_leads_order_incomplete'] = 'Complete these lead fields before placing an order: %s';
 $lang['siba_leads_order_incomplete_short'] = 'Lead profile is incomplete. Complete the lead before placing an order.';
+$lang['siba_leads_order_required_star'] = 'Required to place an order';
 $lang['siba_leads_card_has_order'] = 'Has order';
 $lang['siba_leads_card_awaiting_payment'] = 'Awaiting payment';
 $lang['siba_leads_card_mark_paid'] = 'Record payment';
