@@ -39,7 +39,20 @@ if (get_option('siba_leads_sales_rr_index') === false || get_option('siba_leads_
     add_option('siba_leads_sales_rr_index', '0');
 }
 
+if (!$CI->db->table_exists(db_prefix() . 'siba_leads_failure_reasons')) {
+    $CI->db->query('CREATE TABLE `' . db_prefix() . "siba_leads_failure_reasons` (
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `title` varchar(191) NOT NULL,
+        `color` varchar(20) NOT NULL DEFAULT '#6b7280',
+        `datecreated` datetime NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=" . $CI->db->char_set . ';');
+}
+
 $CI->load->helper('siba_leads/siba_leads');
 if (function_exists('siba_leads_ensure_lead_columns')) {
     siba_leads_ensure_lead_columns();
+}
+if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+    siba_leads_ensure_failure_reasons_table();
 }

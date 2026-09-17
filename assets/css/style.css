@@ -1309,3 +1309,316 @@ body.rtl #lead-modal .lead-edit .input-group-select .input-group-btn > .btn {
         text-align: center;
     }
 }
+
+/* ===== Siba Leads reports (CRM-style reporting panel) ===== */
+.siba-main-report-cntr {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: stretch;
+  gap: 0;
+  min-height: calc(100vh - 120px);
+  background: #f3f4f6;
+  margin: -15px -15px 0;
+  border-radius: 0;
+}
+.siba-report-idenav {
+  width: 220px;
+  flex: 0 0 220px;
+  background: #fff;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+}
+.siba-report-idenav .siba-idenav-title {
+  padding: 14px 16px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: none;
+}
+.siba-report-idenav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 16px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(100vh - 160px);
+}
+.siba-report-idenav li a {
+  display: block;
+  padding: 10px 16px;
+  color: #374151;
+  text-decoration: none;
+  font-size: 13px;
+  border-right: 3px solid transparent;
+  transition: background .15s, color .15s;
+}
+.siba-report-idenav li a:hover {
+  background: #f9fafb;
+  color: #0f766e;
+}
+.siba-report-idenav li.active a {
+  background: #ecfdf5;
+  color: #0f766e;
+  font-weight: 600;
+  border-right-color: #0f766e;
+}
+.siba-report-chart-cntr {
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+  padding: 16px 20px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.siba-report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.siba-report-toolbar .siba-report-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.siba-report-toolbar .siba-report-title.is-conversion {
+  color: #0d9488;
+}
+.siba-report-toolbar .siba-title-info {
+  color: #6b7280;
+  font-size: 14px;
+}
+.siba-report-toolbar .siba-title-info:hover {
+  color: #0f766e;
+}
+.siba-report-toolbar .siba-tb-btn {
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.siba-report-toolbar .siba-tb-btn:hover {
+  background: #f9fafb;
+  color: #0f766e;
+  border-color: #a7f3d0;
+}
+.siba-report-toolbar .siba-tb-btn.is-active {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+  font-weight: 600;
+}
+.siba-report-axis-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+.siba-report-axis-tabs .siba-axis-tab {
+  display: inline-block;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #6b7280;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.siba-report-axis-tabs .siba-axis-tab:hover {
+  color: #0f766e;
+}
+.siba-report-axis-tabs .siba-axis-tab.is-active {
+  color: #0f766e;
+  font-weight: 600;
+  border-bottom-color: #14b8a6;
+}
+.siba-report-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-right: auto;
+}
+.siba-metric-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #fff;
+}
+.siba-metric-toggle a {
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #6b7280;
+  text-decoration: none;
+  background: #fff;
+}
+.siba-metric-toggle a.is-active {
+  background: #14b8a6;
+  color: #fff;
+  font-weight: 600;
+}
+.siba-main-report-cntr:not(.with-rightbar) {
+  display: block;
+  margin: -15px -15px 0;
+  background: #f3f4f6;
+  min-height: calc(100vh - 120px);
+}
+.siba-main-report-cntr:not(.with-rightbar) .siba-report-chart-cntr {
+  background: #fff;
+  margin: 0;
+  min-height: calc(100vh - 120px);
+}
+.siba-report-toolbar .siba-tb-fx {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 8px 4px 10px;
+  background: #fff;
+}
+.siba-report-toolbar .siba-tb-fx input {
+  width: 88px;
+  height: 28px;
+  padding: 2px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: none;
+}
+.siba-report-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+.siba-report-filters-bar .form-group {
+  margin-bottom: 0;
+  min-width: 160px;
+}
+.siba-report-filters-bar label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.siba-report-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.siba-report-summary-strip .siba-sum-card {
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 110px;
+}
+.siba-report-summary-strip .siba-sum-card .lbl {
+  font-size: 11px;
+  color: #6b7280;
+}
+.siba-report-summary-strip .siba-sum-card .val {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 2px;
+}
+.siba-report-chart-wrap {
+  width: 100%;
+  min-height: 550px;
+  background: transparent;
+}
+.siba-report-table-wrap {
+  margin-top: 18px;
+}
+.siba-metric-toggle {
+  display: inline-flex;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.siba-metric-toggle a {
+  padding: 5px 14px;
+  font-size: 12px;
+  color: #6b7280;
+  text-decoration: none;
+  background: #fff;
+}
+.siba-metric-toggle a.is-active,
+.siba-metric-toggle a.is-active:hover {
+  background: #0f766e;
+  color: #fff;
+  font-weight: 600;
+}
+.siba-report-legend-actions {
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+@media (max-width: 991px) {
+  .siba-main-report-cntr {
+    flex-direction: column;
+    margin: 0;
+  }
+  .siba-report-idenav {
+    width: 100%;
+    flex: none;
+    border-left: 0;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .siba-report-idenav ul {
+    display: flex;
+    overflow-x: auto;
+    max-height: none;
+    padding: 0 8px 8px;
+  }
+  .siba-report-idenav li a {
+    white-space: nowrap;
+    border-right: 0;
+    border-bottom: 3px solid transparent;
+  }
+  .siba-report-idenav li.active a {
+    border-right-color: transparent;
+    border-bottom-color: #0f766e;
+  }
+}
+@media print {
+  .siba-report-idenav,
+  .siba-report-toolbar .siba-no-print,
+  .siba-report-filters-bar,
+  #header,
+  #setup-menu-wrapper,
+  .sidebar,
+  aside {
+    display: none !important;
+  }
+  .siba-main-report-cntr {
+    margin: 0;
+    background: #fff;
+  }
+  .siba-report-chart-cntr {
+    padding: 0;
+  }
+}

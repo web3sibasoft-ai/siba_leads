@@ -70,6 +70,19 @@ class SibaLeadsKanban extends LeadsKanban
         $this->ci->db->join(db_prefix() . 'leads_sources', db_prefix() . 'leads_sources.id=' . db_prefix() . 'leads.source', 'left');
         $this->ci->db->join(db_prefix() . 'staff', db_prefix() . 'staff.staffid=' . db_prefix() . 'leads.assigned', 'left');
         $this->ci->db->where(db_prefix() . 'leads.status', $this->status);
+        // Avoid DATETIME = '' (MySQL 8: Incorrect DATETIME value: '').
+        if (function_exists('siba_leads_kanban_open_where_sql')) {
+            $this->ci->db->where(siba_leads_kanban_open_where_sql(db_prefix() . 'leads'), null, false);
+        } else {
+            $this->ci->db->where(db_prefix() . 'leads.lost', 0);
+            $this->ci->db->where(db_prefix() . 'leads.junk', 0);
+            $this->ci->db->where(
+                '(' . db_prefix() . 'leads.date_converted IS NULL'
+                . ' OR ' . db_prefix() . "leads.date_converted < '1971-01-01 00:00:00')",
+                null,
+                false
+            );
+        }
 
         if (!siba_leads_can_view_all()) {
             $this->ci->db->where(db_prefix() . 'leads.assigned', (int) get_staff_user_id());

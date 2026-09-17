@@ -35,6 +35,10 @@
                                 <i class="fa-solid fa-table-list"></i>
                                 <?= _l('siba_leads_open_core_list'); ?>
                             </a>
+                            <a href="<?= admin_url('siba_leads/failed'); ?>" class="btn btn-default">
+                                <i class="fa-solid fa-circle-xmark"></i>
+                                <?= _l('siba_leads_failed'); ?>
+                            </a>
                             <?php if (is_admin()) { ?>
                             <a href="<?= admin_url('siba_leads/teams'); ?>" class="btn btn-default">
                                 <i class="fa-solid fa-users"></i>

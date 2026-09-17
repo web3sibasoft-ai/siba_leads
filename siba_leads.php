@@ -40,6 +40,7 @@ hooks()->add_action('after_lead_updated', 'siba_leads_action_website_lead_update
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_profile_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_form_meta_seed');
+hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_outcome_banner');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
 hooks()->add_filter('not_importable_leads_fields', 'siba_leads_not_importable_leads_fields');
@@ -101,6 +102,10 @@ function siba_leads_load_helpers()
     if (function_exists('siba_leads_ensure_lead_columns')) {
         siba_leads_ensure_lead_columns();
     }
+
+    if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+        siba_leads_ensure_failure_reasons_table();
+    }
 }
 
 function siba_leads_register_permissions()
@@ -137,6 +142,20 @@ function siba_leads_init_menu()
         'position' => 99,
     ]);
 
+    $CI->app_menu->add_sidebar_children_item('leads', [
+        'slug'     => 'siba-leads-failed',
+        'name'     => _l('siba_leads_failed'),
+        'href'     => admin_url('siba_leads/failed'),
+        'position' => 98,
+    ]);
+
+    $CI->app_menu->add_sidebar_children_item('leads', [
+        'slug'     => 'siba-leads-reports',
+        'name'     => _l('siba_leads_reports'),
+        'href'     => admin_url('siba_leads/reports?report=sources'),
+        'position' => 97,
+    ]);
+
     if (is_admin()) {
         $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-teams',
@@ -145,10 +164,23 @@ function siba_leads_init_menu()
             'position' => 100,
         ]);
 
+        $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-failure-reasons',
+            'name'     => _l('siba_leads_failure_reasons'),
+            'href'     => admin_url('siba_leads/failure_reasons'),
+            'position' => 101,
+        ]);
+
         $CI->app_menu->add_setup_menu_item('siba-leads-teams', [
             'name'     => _l('siba_leads_teams'),
             'href'     => admin_url('siba_leads/teams'),
             'position' => 36,
+        ]);
+
+        $CI->app_menu->add_setup_menu_item('siba-leads-failure-reasons', [
+            'name'     => _l('siba_leads_failure_reasons'),
+            'href'     => admin_url('siba_leads/failure_reasons'),
+            'position' => 37,
         ]);
     }
 }
@@ -193,6 +225,32 @@ function siba_leads_ensure_leads_menu_children($items)
             ];
         }
 
+        if (!in_array('siba-leads-failed', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-failed',
+                'name'        => _l('siba_leads_failed'),
+                'href'        => admin_url('siba_leads/failed'),
+                'position'    => 98,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
+        if (!in_array('siba-leads-reports', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-reports',
+                'name'        => _l('siba_leads_reports'),
+                'href'        => admin_url('siba_leads/reports?report=sources'),
+                'position'    => 97,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
         if (is_admin() && !in_array('siba-leads-teams', $slugs, true)) {
             $children[] = [
                 'parent_slug' => 'leads',
@@ -200,6 +258,19 @@ function siba_leads_ensure_leads_menu_children($items)
                 'name'        => _l('siba_leads_teams'),
                 'href'        => admin_url('siba_leads/teams'),
                 'position'    => 100,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
+        if (is_admin() && !in_array('siba-leads-failure-reasons', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-failure-reasons',
+                'name'        => _l('siba_leads_failure_reasons'),
+                'href'        => admin_url('siba_leads/failure_reasons'),
+                'position'    => 101,
                 'icon'        => '',
                 'badge'       => [],
                 'href_attrs'  => [],
@@ -219,29 +290,50 @@ function siba_leads_ensure_setup_teams_menu($items)
         return $items;
     }
 
+    $haveTeams = false;
+    $haveReasons = false;
     foreach ($items as $item) {
-        if (($item['slug'] ?? '') === 'siba-leads-teams') {
-            return $items;
+        $slug = $item['slug'] ?? '';
+        if ($slug === 'siba-leads-teams') {
+            $haveTeams = true;
+        }
+        if ($slug === 'siba-leads-failure-reasons') {
+            $haveReasons = true;
         }
     }
 
-    $items['siba-leads-teams'] = [
-        'slug'       => 'siba-leads-teams',
-        'name'       => _l('siba_leads_teams'),
-        'href'       => admin_url('siba_leads/teams'),
-        'position'   => 36,
-        'icon'       => 'fa fa-users',
-        'badge'      => [],
-        'href_attrs' => [],
-        'children'   => [],
-    ];
+    if (!$haveTeams) {
+        $items['siba-leads-teams'] = [
+            'slug'       => 'siba-leads-teams',
+            'name'       => _l('siba_leads_teams'),
+            'href'       => admin_url('siba_leads/teams'),
+            'position'   => 36,
+            'icon'       => 'fa fa-users',
+            'badge'      => [],
+            'href_attrs' => [],
+            'children'   => [],
+        ];
+    }
+
+    if (!$haveReasons) {
+        $items['siba-leads-failure-reasons'] = [
+            'slug'       => 'siba-leads-failure-reasons',
+            'name'       => _l('siba_leads_failure_reasons'),
+            'href'       => admin_url('siba_leads/failure_reasons'),
+            'position'   => 37,
+            'icon'       => 'fa fa-ban',
+            'badge'      => [],
+            'href_attrs' => [],
+            'children'   => [],
+        ];
+    }
 
     return $items;
 }
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260915a') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260917t') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -312,7 +404,27 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadsOrderRequiredFields = ' . json_encode(array_values($orderRequiredFields), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsOrderRequiredStarTitle = ' . json_encode(_l('siba_leads_order_required_star'), JSON_UNESCAPED_UNICODE) . ';</script>';
 
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260915a') . '"></script>';
+    $failureReasons = [];
+    if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+        siba_leads_ensure_failure_reasons_table();
+        $CI->load->model('siba_leads/siba_leads_failure_reasons_model');
+        $failureReasons = $CI->siba_leads_failure_reasons_model->get();
+    }
+    echo '<script>window.sibaLeadsFailureReasons = ' . json_encode($failureReasons, JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsFailLabels = ' . json_encode([
+        'title'           => _l('siba_leads_mark_failed'),
+        'hint'            => _l('siba_leads_mark_failed_hint'),
+        'reason'          => _l('siba_leads_failure_reason'),
+        'confirm'         => _l('siba_leads_mark_failed_confirm'),
+        'reasonRequired'  => _l('siba_leads_mark_failed_reason_required'),
+        'noReasons'       => _l('siba_leads_mark_failed_no_reasons'),
+        'select'          => _l('dropdown_non_selected_tex'),
+        'close'           => _l('close'),
+    ], JSON_UNESCAPED_UNICODE) . ';</script>';
+
+    $CI->load->view('siba_leads/partials/mark_failed_modal', ['reasons' => $failureReasons]);
+
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260917g') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

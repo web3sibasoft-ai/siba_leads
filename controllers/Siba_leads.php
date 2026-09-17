@@ -36,7 +36,274 @@ class Siba_leads extends AdminController
         $data['sort_by']       = get_option('default_leads_kanban_sort') ?: 'dateadded';
         $data['can_view_all']  = siba_leads_can_view_all();
 
+        if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+            siba_leads_ensure_failure_reasons_table();
+        }
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+        $data['failure_reasons'] = $this->siba_leads_failure_reasons_model->get();
+
         $this->load->view('siba_leads/manage', $data);
+    }
+
+    /**
+     * Mark lead as failed (requires failure reason). Removes from kanban.
+     */
+    public function mark_failed()
+    {
+        if (!$this->input->is_ajax_request() || !$this->input->post()) {
+            show_404();
+        }
+
+        if (!is_admin() && !staff_can('edit', SIBA_LEADS_MODULE_NAME) && staff_cant('edit', 'leads')) {
+            ajax_access_denied();
+        }
+
+        $leadId   = (int) $this->input->post('lead_id');
+        $reasonId = (int) $this->input->post('failure_reason_id');
+
+        if ($leadId < 1) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_invalid'),
+            ]);
+
+            return;
+        }
+
+        if (!siba_leads_can_manage_lead($leadId)) {
+            ajax_access_denied();
+        }
+
+        if ($reasonId < 1) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_reason_required'),
+            ]);
+
+            return;
+        }
+
+        if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+            siba_leads_ensure_failure_reasons_table();
+        }
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+        $reason = $this->siba_leads_failure_reasons_model->get_row($reasonId);
+        if (!$reason) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_reason_required'),
+            ]);
+
+            return;
+        }
+
+        $lead = $this->leads_model->get($leadId);
+        if (!$lead) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_invalid'),
+            ]);
+
+            return;
+        }
+
+        if (!empty($lead->date_converted) && $lead->date_converted !== '0000-00-00 00:00:00') {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_already_converted'),
+            ]);
+
+            return;
+        }
+
+        $ok = siba_leads_set_outcome($leadId, 'failed', 'manual_fail', [
+            'failure_reason_id' => $reasonId,
+        ]);
+
+        if (!$ok) {
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_mark_failed_invalid'),
+            ]);
+
+            return;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'message' => _l('siba_leads_mark_failed_success'),
+            'id'      => $leadId,
+        ]);
+    }
+
+    /**
+     * Failed leads archive with filters.
+     */
+    public function failed()
+    {
+        close_setup_menu();
+
+        if (function_exists('siba_leads_ensure_lead_columns')) {
+            siba_leads_ensure_lead_columns();
+        }
+        if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+            siba_leads_ensure_failure_reasons_table();
+        }
+
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+        $this->load->model('staff_model');
+
+        $filters = [
+            'reason_id'  => (int) $this->input->get('reason_id'),
+            'outcome_by' => (int) $this->input->get('outcome_by'),
+            'assigned'   => (int) $this->input->get('assigned'),
+            'date_from'  => trim((string) $this->input->get('date_from')),
+            'date_to'    => trim((string) $this->input->get('date_to')),
+            'q'          => trim((string) $this->input->get('q')),
+        ];
+
+        $prefix  = db_prefix();
+        $leadsT  = $prefix . 'leads';
+        $reasonT = $prefix . 'siba_leads_failure_reasons';
+
+        $this->db->select($leadsT . '.*, r.title as reason_title, r.color as reason_color');
+        $this->db->from($leadsT);
+        $this->db->join($reasonT . ' r', 'r.id = ' . $leadsT . '.siba_failure_reason_id', 'left');
+        $this->db->group_start();
+        $this->db->where($leadsT . '.lost', 1);
+        $this->db->or_where($leadsT . '.siba_outcome', 'failed');
+        $this->db->group_end();
+
+        if (!siba_leads_can_view_all()) {
+            $this->db->where($leadsT . '.assigned', (int) get_staff_user_id());
+        }
+
+        if ($filters['reason_id'] > 0) {
+            $this->db->where($leadsT . '.siba_failure_reason_id', $filters['reason_id']);
+        }
+        if ($filters['outcome_by'] > 0) {
+            $this->db->where($leadsT . '.siba_outcome_by', $filters['outcome_by']);
+        }
+        if ($filters['assigned'] > 0) {
+            $this->db->where($leadsT . '.assigned', $filters['assigned']);
+        }
+        if ($filters['date_from'] !== '') {
+            if (!function_exists('to_sql_date_custom')) {
+                $this->load->helper('siba_license/siba_license');
+            }
+            $fromRaw = function_exists('siba_license_to_latin_digits')
+                ? siba_license_to_latin_digits($filters['date_from'])
+                : $filters['date_from'];
+            $from = function_exists('to_sql_date_custom')
+                ? to_sql_date_custom($fromRaw)
+                : to_sql_date($fromRaw);
+            // Only query with a real Gregorian SQL date.
+            if (is_string($from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+                $this->db->where($leadsT . '.siba_outcome_at >=', $from . ' 00:00:00');
+                if (function_exists('to_view_date_custom')) {
+                    $viewFrom = to_view_date_custom($from);
+                    if ($viewFrom) {
+                        $filters['date_from'] = $viewFrom;
+                    }
+                }
+            } else {
+                $filters['date_from'] = '';
+            }
+        }
+        if ($filters['date_to'] !== '') {
+            if (!function_exists('to_sql_date_custom')) {
+                $this->load->helper('siba_license/siba_license');
+            }
+            $toRaw = function_exists('siba_license_to_latin_digits')
+                ? siba_license_to_latin_digits($filters['date_to'])
+                : $filters['date_to'];
+            $to = function_exists('to_sql_date_custom')
+                ? to_sql_date_custom($toRaw)
+                : to_sql_date($toRaw);
+            if (is_string($to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+                $this->db->where($leadsT . '.siba_outcome_at <=', $to . ' 23:59:59');
+                if (function_exists('to_view_date_custom')) {
+                    $viewTo = to_view_date_custom($to);
+                    if ($viewTo) {
+                        $filters['date_to'] = $viewTo;
+                    }
+                }
+            } else {
+                $filters['date_to'] = '';
+            }
+        }
+        if ($filters['q'] !== '') {
+            $q = $this->db->escape_like_str($filters['q']);
+            $this->db->group_start();
+            $this->db->like($leadsT . '.name', $q);
+            $this->db->or_like($leadsT . '.phonenumber', $q);
+            $this->db->or_like($leadsT . '.email', $q);
+            $this->db->or_like($leadsT . '.company', $q);
+            $this->db->group_end();
+        }
+
+        $this->db->order_by($leadsT . '.siba_outcome_at', 'DESC');
+        $this->db->order_by($leadsT . '.id', 'DESC');
+        $leads = $this->db->get()->result_array();
+
+        $data['title']   = _l('siba_leads_failed');
+        $data['leads']   = $leads;
+        $data['filters'] = $filters;
+        $data['reasons'] = $this->siba_leads_failure_reasons_model->get();
+        $data['staff']   = $this->staff_model->get('', ['active' => 1, 'is_not_staff' => 0]);
+
+        $this->load->view('siba_leads/failed/manage', $data);
+    }
+
+    /**
+     * Aggregated lead reports (analysis / incoming / pipeline / conversion / speed / sources / failures / sales).
+     */
+    public function reports()
+    {
+        close_setup_menu();
+
+        if (function_exists('siba_leads_ensure_lead_columns')) {
+            siba_leads_ensure_lead_columns();
+        }
+        if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+            siba_leads_ensure_failure_reasons_table();
+        }
+
+        $this->load->model('leads_model');
+        $this->load->model('staff_model');
+
+        $filters = siba_leads_reports_parse_filters($this->input);
+        $groupBy = $filters['group_by'];
+
+        $result = siba_leads_reports_run($filters, $groupBy);
+
+        $data['title']     = _l('siba_leads_reports');
+        $data['filters']   = $filters;
+        $data['group_by']  = $groupBy;
+        $data['rows']      = $result['rows'] ?? [];
+        $data['summary']   = $result['summary'] ?? [];
+        $data['chart']     = siba_leads_reports_chart_payload(
+            $filters['report'],
+            $data['rows'],
+            $groupBy,
+            $filters
+        );
+        $data['staff']     = $this->staff_model->get('', ['active' => 1, 'is_not_staff' => 0]);
+        $data['sources']   = $this->leads_model->get_source();
+        $data['tags']      = function_exists('get_tags') ? get_tags() : [];
+        $data['can_view_all'] = siba_leads_can_view_all();
+        $data['report_tabs']  = siba_leads_reports_tabs();
+        $data['team_options'] = [];
+        if (function_exists('siba_leads_team_definitions')) {
+            foreach (siba_leads_team_definitions() as $key => $def) {
+                $data['team_options'][] = [
+                    'id'   => $key,
+                    'name' => (string) ($def['label'] ?? $key),
+                ];
+            }
+        }
+
+        $this->load->view('siba_leads/reports/manage', $data);
     }
 
     public function kanban()
@@ -169,6 +436,105 @@ class Siba_leads extends AdminController
         $data['sales_member_count'] = count(siba_leads_get_team_member_ids('sales', true));
 
         $this->load->view('siba_leads/teams', $data);
+    }
+
+    /**
+     * CRUD: lead failure reasons (title + color).
+     */
+    public function failure_reasons()
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        if (function_exists('siba_leads_ensure_failure_reasons_table')) {
+            siba_leads_ensure_failure_reasons_table();
+        }
+
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+
+        $data['title']   = _l('siba_leads_failure_reasons');
+        $data['reasons'] = $this->siba_leads_failure_reasons_model->get();
+
+        $this->load->view('siba_leads/failure_reasons/manage', $data);
+    }
+
+    public function failure_reason_modal($id = '')
+    {
+        if (!is_admin() || !$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+
+        $data['reason'] = null;
+        if ($id !== '') {
+            $data['reason'] = $this->siba_leads_failure_reasons_model->get_row($id);
+        }
+
+        echo json_encode([
+            'success' => true,
+            'view'    => $this->load->view('siba_leads/failure_reasons/modal', $data, true),
+        ]);
+    }
+
+    public function failure_reason_save()
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        if (!$this->input->post()) {
+            redirect(admin_url('siba_leads/failure_reasons'));
+        }
+
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+
+        $id    = (int) $this->input->post('id');
+        $title = trim((string) $this->input->post('title'));
+        $color = trim((string) $this->input->post('color'));
+
+        if ($title === '') {
+            set_alert('warning', _l('siba_leads_failure_reason_title_required'));
+            redirect(admin_url('siba_leads/failure_reasons'));
+        }
+
+        if ($color === '' || !preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
+            $color = '#6b7280';
+        }
+
+        $payload = [
+            'title' => $title,
+            'color' => strtolower($color),
+        ];
+
+        if ($id > 0) {
+            $this->siba_leads_failure_reasons_model->update($id, $payload);
+            set_alert('success', _l('updated_successfully', _l('siba_leads_failure_reason')));
+        } else {
+            $payload['datecreated'] = date('Y-m-d H:i:s');
+            $this->siba_leads_failure_reasons_model->add($payload);
+            set_alert('success', _l('added_successfully', _l('siba_leads_failure_reason')));
+        }
+
+        redirect(admin_url('siba_leads/failure_reasons'));
+    }
+
+    public function failure_reason_delete($id = '')
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        $id = (int) $id;
+        if ($id < 1) {
+            redirect(admin_url('siba_leads/failure_reasons'));
+        }
+
+        $this->load->model('siba_leads/siba_leads_failure_reasons_model');
+        $this->siba_leads_failure_reasons_model->delete($id);
+        set_alert('success', _l('deleted', _l('siba_leads_failure_reason')));
+        redirect(admin_url('siba_leads/failure_reasons'));
     }
 
     /**

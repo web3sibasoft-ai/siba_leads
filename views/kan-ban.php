@@ -1,6 +1,11 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed');
 $is_admin = is_admin();
 foreach ($statuses as $status) {
+    // Converted/default Customer column is no longer shown — succeeded leads leave the board.
+    if (!empty($status['isdefault'])) {
+        continue;
+    }
+
     $kanBan = siba_leads_kanban_for_status($status['id']);
     $kanBan->search($this->input->get('search'))
         ->sortBy($this->input->get('sort_by'), $this->input->get('sort'));

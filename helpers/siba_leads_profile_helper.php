@@ -261,8 +261,41 @@ function siba_leads_filter_profile_fields($data)
 }
 
 /**
- * Customer-profile fields a lead must have before an order can be placed.
+ * Ensure Siba Leads helpers/lang are available outside the leads module pages.
+ */
+function siba_leads_ensure_loaded(): void
+{
+    static $loaded = false;
+    if ($loaded) {
+        return;
+    }
+    $loaded = true;
+
+    $CI = &get_instance();
+    if (!function_exists('siba_leads_lead_order_readiness')) {
+        $helper = module_dir_path('siba_leads', 'helpers/siba_leads_helper.php');
+        if (is_file($helper)) {
+            $CI->load->helper('siba_leads/siba_leads');
+        }
+    }
+    if (method_exists($CI->lang, 'load')) {
+        $CI->lang->load('siba_leads/siba_leads');
+    }
+}
+
+/**
+ * Customer-profile fields a lead must have before a financial approval request.
  * Mirrors the new-customer form (Perfex + Siba extras) that map onto leads.
+ *
+ * Required:
+ * - name
+ * - phonenumber
+ * - address
+ * - province_id
+ * - city_id
+ * - job_group_id
+ * - position_id (or legacy title)
+ * - company (only when company_is_required option is on)
  *
  * @return array<string, array{label:string,type:string}>
  */
@@ -342,8 +375,13 @@ function siba_leads_lead_order_readiness($lead): array
             'city_id'     => (int) $get('city_id'),
         ];
 
+    $name = trim((string) ($get('name') ?? ''));
+    if ($name === '') {
+        $name = trim((string) ($get('lead_name') ?? ''));
+    }
+
     $values = [
-        'name'         => trim((string) ($get('name') ?? $get('lead_name') ?? '')),
+        'name'         => $name,
         'company'      => trim((string) ($get('company') ?? '')),
         'phonenumber'  => trim((string) ($get('phonenumber') ?? '')),
         'address'      => trim((string) ($get('address') ?? '')),
@@ -408,4 +446,77 @@ function siba_leads_lead_order_readiness_by_id($lead_id): array
     }
 
     return siba_leads_lead_order_readiness($CI->leads_model->get($lead_id));
+}
+
+/**
+ * Financial-approval gate for an order tied to an unconverted lead.
+ * Converted clients / non-lead orders are always ready.
+ *
+ * @param int|array|object $order_or_id
+ * @return array{ok:bool,lead_id:int,missing:array,missing_labels:array,message:string}
+ */
+function siba_leads_order_finance_readiness($order_or_id): array
+{
+    siba_leads_ensure_loaded();
+
+    $CI = &get_instance();
+    $order = null;
+    if (is_numeric($order_or_id)) {
+        $order = $CI->db->where('order_id', (int) $order_or_id)->get(db_prefix() . 'siba_orders')->row();
+    } elseif (is_array($order_or_id)) {
+        $order = (object) $order_or_id;
+    } elseif (is_object($order_or_id)) {
+        $order = $order_or_id;
+    }
+
+    $ready = [
+        'ok'             => true,
+        'lead_id'        => 0,
+        'missing'        => [],
+        'missing_labels' => [],
+        'message'        => '',
+    ];
+
+    if (!$order) {
+        return $ready;
+    }
+
+    $lead_id = (int) ($order->order_lead_id ?? 0);
+    $customer = (int) ($order->order_customer ?? 0);
+
+    // Fallback: some callers pass lead id in a temporary payload.
+    if ($lead_id < 1 && isset($order->lead_id)) {
+        $lead_id = (int) $order->lead_id;
+    }
+
+    if ($lead_id < 1) {
+        return $ready;
+    }
+
+    // Converted lead (client exists for this lead) → no gate.
+    $converted = $CI->db->select('userid')
+        ->from(db_prefix() . 'clients')
+        ->where('leadid', $lead_id)
+        ->limit(1)
+        ->get()
+        ->row();
+    if ($converted || $customer > 0) {
+        return $ready;
+    }
+
+    $readiness = siba_leads_lead_order_readiness_by_id($lead_id);
+    $missingText = implode('، ', $readiness['missing_labels'] ?? []);
+    $message = !empty($readiness['ok'])
+        ? ''
+        : ($missingText !== ''
+            ? _l('siba_leads_finance_incomplete', $missingText)
+            : _l('siba_leads_finance_incomplete_short'));
+
+    return [
+        'ok'             => !empty($readiness['ok']),
+        'lead_id'        => $lead_id,
+        'missing'        => $readiness['missing'] ?? [],
+        'missing_labels' => $readiness['missing_labels'] ?? [],
+        'message'        => $message,
+    ];
 }

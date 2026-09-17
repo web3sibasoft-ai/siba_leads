@@ -208,21 +208,30 @@ $hasMyActiveTask = $myActiveTasks > 0;
         </div>
         <?php } ?>
 
-        <div class="siba-lead-card__footer">
+            <div class="siba-lead-card__footer">
             <div class="siba-lead-card__dates">
                 <?php if ($has_last_contact) { ?>
-                <span class="siba-lead-card__date" data-toggle="tooltip" data-title="<?= e(_dt($lead['lastcontact'])); ?>">
+                <span class="siba-lead-card__date" data-toggle="tooltip" data-title="<?= e(function_exists('siba_leads_jalali_datetime') ? siba_leads_jalali_datetime($lead['lastcontact']) : _dt($lead['lastcontact'])); ?>">
                     <i class="fa-regular fa-comments"></i>
                     <?= e(time_ago($lead['lastcontact'])); ?>
                 </span>
                 <?php } ?>
-                <span class="siba-lead-card__date" data-toggle="tooltip" data-title="<?= e(_dt($lead['dateadded'])); ?>">
+                <span class="siba-lead-card__date" data-toggle="tooltip" data-title="<?= e(function_exists('siba_leads_jalali_datetime') ? siba_leads_jalali_datetime($lead['dateadded']) : _dt($lead['dateadded'])); ?>">
                     <i class="fa-regular fa-clock"></i>
                     <?= e(time_ago($lead['dateadded'])); ?>
                 </span>
             </div>
 
             <div class="siba-lead-card__stats">
+                <?php if (!$lead_is_client && (is_admin() || staff_can('edit', SIBA_LEADS_MODULE_NAME) || staff_can('edit', 'leads'))) { ?>
+                <a href="#"
+                   class="siba-lead-card__fail-btn text-danger"
+                   data-toggle="tooltip"
+                   title="<?= e(_l('siba_leads_mark_failed')); ?>"
+                   onclick="siba_leads_open_mark_failed(<?= (int) $lead['id']; ?>); return false;">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                </a>
+                <?php } ?>
                 <?php hooks()->do_action('before_leads_kanban_card_icons', $lead); ?>
                 <span data-toggle="tooltip" data-title="<?= _l('leads_canban_notes', $lead['total_notes']); ?>">
                     <i class="fa-regular fa-note-sticky"></i>
@@ -272,7 +281,38 @@ $hasMyActiveTask = $myActiveTasks > 0;
                 $finClass = $pendingFinReq
                     ? ' siba-lead-card__order-btn--requested'
                     : ' siba-lead-card__order-btn--finance';
+
+                $financeReady = true;
+                $financeMissingMsg = '';
+                if (!$lead_is_client) {
+                    if (function_exists('siba_leads_ensure_loaded')) {
+                        siba_leads_ensure_loaded();
+                    }
+                    if (function_exists('siba_leads_lead_order_readiness')) {
+                        $readiness = siba_leads_lead_order_readiness($lead);
+                        $financeReady = !empty($readiness['ok']);
+                        if (!$financeReady) {
+                            $missingText = implode('، ', $readiness['missing_labels'] ?? []);
+                            $financeMissingMsg = $missingText !== ''
+                                ? _l('siba_leads_finance_incomplete', $missingText)
+                                : _l('siba_leads_finance_incomplete_short');
+                        }
+                    }
+                }
+
+                if (!$financeReady && !$pendingFinReq) {
         ?>
+        <a href="#"
+            class="siba-lead-card__order-btn siba-lead-card__order-btn--incomplete"
+            data-siba-complete-lead="<?= (int) $lead['id']; ?>"
+            data-siba-missing="<?= e($financeMissingMsg); ?>"
+            onclick="event.stopPropagation(); if (typeof siba_leads_prompt_complete_lead === 'function') { siba_leads_prompt_complete_lead(<?= (int) $lead['id']; ?>, this.getAttribute('data-siba-missing')); } else if (typeof init_lead === 'function') { init_lead(<?= (int) $lead['id']; ?>, true); } return false;"
+            onmousedown="event.stopPropagation();"
+            title="<?= e($financeMissingMsg !== '' ? $financeMissingMsg : _l('siba_leads_finance_incomplete_short')); ?>">
+            <i class="fa fa-user-edit"></i>
+            <span><?= _l('siba_leads_card_complete_lead'); ?></span>
+        </a>
+        <?php } else { ?>
         <a href="#"
             class="siba-lead-card__order-btn<?= $finClass; ?>"
             onclick="event.stopPropagation(); siba_leads_add_fin_approve_req(<?= $activeOrderId; ?>); return false;"
@@ -282,6 +322,7 @@ $hasMyActiveTask = $myActiveTasks > 0;
             <span><?= $finLabel; ?></span>
         </a>
         <?php }
+            }
             } else {
             $existingOrderId = (int) ($lead['existing_order_id'] ?? 0);
             $hideNewOrder = $lead_is_client && $existingOrderId > 0;
@@ -302,30 +343,7 @@ $hasMyActiveTask = $myActiveTasks > 0;
                 $lead_order_url = ($lead_is_client && !empty($lead['client_userid']))
                     ? admin_url('siba_license/show_add_orders/' . (int) $lead['client_userid'])
                     : admin_url('siba_license/show_add_orders/' . (int) $lead['id'] . '/lead');
-                $orderReady = true;
-                $missingLabels = [];
-                if (!$lead_is_client && function_exists('siba_leads_lead_order_readiness')) {
-                    $readiness = siba_leads_lead_order_readiness($lead);
-                    $orderReady = !empty($readiness['ok']);
-                    $missingLabels = $readiness['missing_labels'] ?? [];
-                }
-                if (!$orderReady) {
-                    $missingText = implode('، ', $missingLabels);
-                    $incompleteMsg = $missingText !== ''
-                        ? _l('siba_leads_order_incomplete', $missingText)
-                        : _l('siba_leads_order_incomplete_short');
         ?>
-        <a href="#"
-            class="siba-lead-card__order-btn siba-lead-card__order-btn--incomplete"
-            data-siba-complete-lead="<?= (int) $lead['id']; ?>"
-            data-siba-missing="<?= e($incompleteMsg); ?>"
-            onclick="event.stopPropagation(); if (typeof siba_leads_prompt_complete_lead === 'function') { siba_leads_prompt_complete_lead(<?= (int) $lead['id']; ?>, this.getAttribute('data-siba-missing')); } else if (typeof init_lead === 'function') { init_lead(<?= (int) $lead['id']; ?>, true); } return false;"
-            onmousedown="event.stopPropagation();"
-            title="<?= e($incompleteMsg); ?>">
-            <i class="fa fa-user-edit"></i>
-            <span><?= _l('siba_leads_card_complete_lead'); ?></span>
-        </a>
-        <?php } else { ?>
         <a href="<?= e($lead_order_url); ?>"
             class="siba-lead-card__order-btn"
             onclick="event.stopPropagation();"
@@ -335,7 +353,6 @@ $hasMyActiveTask = $myActiveTasks > 0;
             <span><?= _l('siba_leads_card_add_order'); ?></span>
         </a>
         <?php }
-            }
             }
         } ?>
 

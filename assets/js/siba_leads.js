@@ -81,6 +81,16 @@
             url: admin_url + 'siba_license/add_fin_approve_req_show/' + id,
             success: function (comment) {
                 comment = typeof comment === 'string' ? JSON.parse(comment) : comment;
+                if (!comment || comment.success === false) {
+                    if (comment && comment.need_complete_lead && typeof window.siba_leads_prompt_complete_lead === 'function') {
+                        window.siba_leads_prompt_complete_lead(comment.lead_id || 0, comment.message || '');
+                        return;
+                    }
+                    if (typeof alert_float === 'function') {
+                        alert_float('warning', (comment && comment.message) ? comment.message : 'Error');
+                    }
+                    return;
+                }
                 $wrap.html(comment.view);
                 var $form = $wrap.find('#add_product_group_form');
                 if ($form.length && !$form.find('[name="siba_leads_return"]').length) {
@@ -2172,5 +2182,257 @@
         } catch (err) {
             // ignore
         }
+
+        $(document).on('click', '#siba-leads-fail-submit', function () {
+            window.siba_leads_submit_mark_failed();
+        });
     }
+
+    window.siba_leads_open_mark_failed = function (leadId) {
+        leadId = parseInt(leadId, 10) || 0;
+        if (!leadId) {
+            return;
+        }
+
+        var reasons = window.sibaLeadsFailureReasons || [];
+        var labels = window.sibaLeadsFailLabels || {};
+        if (!reasons.length) {
+            alert_float('warning', labels.noReasons || 'No failure reasons configured.');
+            return;
+        }
+
+        var $modal = $('#siba-leads-mark-failed-modal');
+        if (!$modal.length) {
+            alert_float('danger', 'Fail modal missing');
+            return;
+        }
+
+        $('#siba-leads-fail-lead-id').val(leadId);
+        var $select = $('#siba-leads-fail-reason');
+        $select.val('');
+        if ($select.hasClass('selectpicker') || $select.data('selectpicker')) {
+            $select.selectpicker('val', '');
+            $select.selectpicker('refresh');
+        }
+        $modal.modal('show');
+    };
+
+    window.siba_leads_submit_mark_failed = function () {
+        var leadId = parseInt($('#siba-leads-fail-lead-id').val(), 10) || 0;
+        var reasonId = parseInt($('#siba-leads-fail-reason').val(), 10) || 0;
+        var labels = window.sibaLeadsFailLabels || {};
+
+        if (!leadId) {
+            return;
+        }
+        if (!reasonId) {
+            alert_float('warning', labels.reasonRequired || 'Select a reason');
+            return;
+        }
+
+        var $btn = $('#siba-leads-fail-submit');
+        $btn.prop('disabled', true);
+
+        $.post(admin_url + 'siba_leads/mark_failed', {
+            lead_id: leadId,
+            failure_reason_id: reasonId
+        }).done(function (raw) {
+            var response = raw;
+            if (typeof raw === 'string') {
+                try { response = JSON.parse(raw); } catch (e) { response = {}; }
+            }
+            if (response && (response.success === true || response.success === 'true')) {
+                alert_float('success', response.message || 'OK');
+                $('#siba-leads-mark-failed-modal').modal('hide');
+                $('body').find('#kan-ban li[data-lead-id="' + leadId + '"]').remove();
+                $('body').find('tr#lead_' + leadId).remove();
+                if (typeof siba_leads_kanban === 'function' && $('#kan-ban').length) {
+                    siba_leads_kanban();
+                }
+                if (typeof init_lead_modal_data === 'function' && $('#lead-modal').is(':visible')) {
+                    init_lead_modal_data(leadId);
+                }
+            } else {
+                alert_float('danger', (response && response.message) ? response.message : 'Error');
+            }
+        }).fail(function (xhr) {
+            alert_float('danger', xhr.responseText || 'Error');
+        }).always(function () {
+            $btn.prop('disabled', false);
+        });
+    };
+
+    // Require a failure reason instead of core reasonless mark_as_lost.
+    window.lead_mark_as_lost = function (id) {
+        window.siba_leads_open_mark_failed(id);
+    };
+
+    function siba_leads_relabel_mark_lost_menu() {
+        var labels = window.sibaLeadsFailLabels || {};
+        var title = labels.title || '';
+        if (!title) {
+            return;
+        }
+        $('#lead-more-dropdown a').each(function () {
+            var onclick = String($(this).attr('onclick') || '');
+            if (onclick.indexOf('lead_mark_as_lost') !== -1) {
+                $(this).html('<i class="fa-solid fa-circle-xmark"></i> ' + title);
+            }
+        });
+    }
+
+    $(document).on('shown.bs.modal', '#lead-modal', function () {
+        window.setTimeout(siba_leads_relabel_mark_lost_menu, 50);
+    });
+
+    function destroyFailedFilterPerfexPicker($input) {
+        if (!$input || !$input.length) {
+            return;
+        }
+        try {
+            if ($input.data('DateTimePicker') && typeof $input.data('DateTimePicker').destroy === 'function') {
+                $input.data('DateTimePicker').destroy();
+            }
+        } catch (e1) { /* ignore */ }
+        try {
+            if ($input.data('xdsoft_datetimepicker')) {
+                $input.off().xdsoftDatetimepicker('destroy');
+            }
+        } catch (e2) { /* ignore */ }
+        $input.removeClass('datepicker datetimepicker xdsoft_input');
+        $input.parents('.form-group').find('.calendar-icon').off('click');
+    }
+
+    function initFailedJalaliDateInput($input, attempt) {
+        if (!$input || !$input.length) {
+            return;
+        }
+        if (typeof $.fn.persianDatepicker !== 'function') {
+            attempt = attempt || 0;
+            if (attempt < 25) {
+                setTimeout(function () {
+                    initFailedJalaliDateInput($input, attempt + 1);
+                }, 120);
+            }
+            return;
+        }
+
+        destroyFailedFilterPerfexPicker($input);
+
+        var instance = $input.data('sibaFailedPd') || $input.data('datepicker');
+        if (instance && typeof instance.destroy === 'function') {
+            try { instance.destroy(); } catch (e) { /* ignore */ }
+        }
+        $input.removeData('sibaFailedPd').removeData('datepicker');
+        $input.off('.pwt').removeClass('pwt-datepicker-input-element');
+
+        var raw = toLatinDigits($input.val()).trim();
+        var hasValue = !!raw;
+        var valueType = 'persian';
+        var display = raw.replace(/-/g, '/');
+
+        if (hasValue && isJalaliYmd(display)) {
+            valueType = 'persian';
+        } else if (hasValue) {
+            valueType = 'gregorian';
+        }
+
+        if (hasValue && display) {
+            $input.val(display).attr('value', display);
+        }
+
+        $input.attr('autocomplete', 'off');
+        var forceLatinInput = function () {
+            var v = toLatinDigits($input.val()).trim();
+            if (v && v !== $input.val()) {
+                $input.val(v).attr('value', v);
+            }
+            return v;
+        };
+        var pd = $input.persianDatepicker({
+            format: 'YYYY/MM/DD',
+            initialValue: hasValue,
+            initialValueType: valueType,
+            calendarType: 'persian',
+            autoClose: true,
+            observer: false,
+            persianDigit: false,
+            toolbox: { calendarSwitch: { enabled: false } },
+            formatter: function (unix) {
+                // Library default is persianDigit:true — force ASCII digits into the field.
+                try {
+                    if (typeof window.persianDate === 'function' && unix != null) {
+                        return new window.persianDate(unix).toLocale('en').format('YYYY/MM/DD');
+                    }
+                } catch (eFmt) { /* fall through */ }
+                var cur = forceLatinInput();
+                return cur || toLatinDigits($input.val()).trim();
+            },
+            onSelect: function () {
+                forceLatinInput();
+            },
+            onSet: function () {
+                forceLatinInput();
+            }
+        });
+        $input.data('sibaFailedPd', pd);
+
+        // Normalize immediately and after the picker finishes painting.
+        forceLatinInput();
+        setTimeout(forceLatinInput, 0);
+        setTimeout(forceLatinInput, 80);
+        $input.off('change.sibaJalaliLatin input.sibaJalaliLatin blur.sibaJalaliLatin')
+            .on('change.sibaJalaliLatin input.sibaJalaliLatin blur.sibaJalaliLatin', forceLatinInput);
+
+        $input.closest('.input-group').find('.calendar-icon').off('click.sibaFailedJalali')
+            .on('click.sibaFailedJalali', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $input.trigger('click').focus();
+            });
+    }
+
+    window.siba_leads_init_failed_jalali_filters = function () {
+        var $form = $('#siba-leads-failed-filters, #siba-leads-reports-filters');
+        if (!$form.length) {
+            return;
+        }
+        $form.find('#date_from, #date_to, .siba-jalali-datepicker').each(function () {
+            initFailedJalaliDateInput($(this));
+        });
+
+        // Before GET submit, rewrite Persian digits so query string stays ASCII.
+        $form.off('submit.sibaJalaliLatin').on('submit.sibaJalaliLatin', function () {
+            $form.find('#date_from, #date_to, .siba-jalali-datepicker').each(function () {
+                var $el = $(this);
+                var v = toLatinDigits($el.val()).trim();
+                $el.val(v);
+            });
+        });
+
+        // Clean Persian digits already present in the address bar (bookmarked / old links).
+        try {
+            if (window.history && window.history.replaceState && window.location.search) {
+                var params = new URLSearchParams(window.location.search);
+                var dirty = false;
+                ['date_from', 'date_to'].forEach(function (key) {
+                    if (!params.has(key)) {
+                        return;
+                    }
+                    var cur = params.get(key) || '';
+                    var lat = toLatinDigits(cur);
+                    if (lat !== cur) {
+                        params.set(key, lat);
+                        dirty = true;
+                    }
+                });
+                if (dirty) {
+                    var qs = params.toString();
+                    window.history.replaceState(null, '', window.location.pathname + (qs ? '?' + qs : ''));
+                }
+            }
+        } catch (eHist) { /* ignore */ }
+    };
+
+    window.siba_leads_init_reports_jalali_filters = window.siba_leads_init_failed_jalali_filters;
 })();
