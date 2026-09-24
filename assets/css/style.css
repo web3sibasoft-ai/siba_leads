@@ -228,6 +228,13 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     color: #047857;
 }
 
+.siba-lead-card__badge--related-customer {
+    gap: 4px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd;
+}
+
 .siba-lead-card__badge--task {
     gap: 4px;
     background: #fff7ed;

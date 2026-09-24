@@ -281,6 +281,135 @@ function siba_leads_phone_duplicate_info($phone, $excludeId = 0): array
 }
 
 /**
+ * First customer (userid) whose client or contact phone matches, or 0.
+ * Prefer the lowest userid when several rows match.
+ */
+function siba_leads_find_client_id_by_phone($phone): int
+{
+    $normalized = siba_leads_normalize_phone($phone);
+    if ($normalized === '') {
+        return 0;
+    }
+
+    $CI = &get_instance();
+    $clientsTable  = db_prefix() . 'clients';
+    $contactsTable = db_prefix() . 'contacts';
+    if (!$CI->db->table_exists($clientsTable)) {
+        return 0;
+    }
+
+    $last10   = strlen($normalized) >= 10 ? substr($normalized, -10) : ltrim($normalized, '0');
+    $variants = siba_leads_phone_variants($phone);
+    $matches  = [];
+
+    $clientPhoneCols = ['phonenumber'];
+    foreach (['phonenumber2', 'telephone'] as $col) {
+        if ($CI->db->field_exists($col, $clientsTable)) {
+            $clientPhoneCols[] = $col;
+        }
+    }
+
+    $CI->db->select('userid, ' . implode(', ', $clientPhoneCols));
+    $CI->db->from($clientsTable);
+    $CI->db->group_start();
+    foreach ($clientPhoneCols as $col) {
+        foreach ($variants as $variant) {
+            $CI->db->or_where($col, $variant);
+        }
+        if ($last10 !== '') {
+            $CI->db->or_like($col, $last10, 'before');
+        }
+    }
+    $CI->db->group_end();
+    $CI->db->order_by('userid', 'ASC');
+    $CI->db->limit(40);
+    foreach ($CI->db->get()->result_array() as $row) {
+        foreach ($clientPhoneCols as $col) {
+            if (siba_leads_normalize_phone($row[$col] ?? '') === $normalized) {
+                $matches[] = (int) $row['userid'];
+                break;
+            }
+        }
+    }
+
+    if ($CI->db->table_exists($contactsTable) && $CI->db->field_exists('phonenumber', $contactsTable)) {
+        $contactPhoneCols = ['phonenumber'];
+        foreach (['contact_phonenumber2', 'contact_telephone'] as $col) {
+            if ($CI->db->field_exists($col, $contactsTable)) {
+                $contactPhoneCols[] = $col;
+            }
+        }
+
+        $CI->db->select('userid, ' . implode(', ', $contactPhoneCols));
+        $CI->db->from($contactsTable);
+        $CI->db->group_start();
+        foreach ($contactPhoneCols as $col) {
+            foreach ($variants as $variant) {
+                $CI->db->or_where($col, $variant);
+            }
+            if ($last10 !== '') {
+                $CI->db->or_like($col, $last10, 'before');
+            }
+        }
+        $CI->db->group_end();
+        $CI->db->order_by('userid', 'ASC');
+        $CI->db->limit(40);
+        foreach ($CI->db->get()->result_array() as $row) {
+            foreach ($contactPhoneCols as $col) {
+                if (siba_leads_normalize_phone($row[$col] ?? '') === $normalized) {
+                    $matches[] = (int) $row['userid'];
+                    break;
+                }
+            }
+        }
+    }
+
+    $matches = array_values(array_filter(array_unique(array_map('intval', $matches))));
+    if ($matches === []) {
+        return 0;
+    }
+    sort($matches, SORT_NUMERIC);
+
+    return (int) $matches[0];
+}
+
+/**
+ * Annotate kanban/list lead rows with related_client_userid (phone match on clients/contacts).
+ *
+ * @param array<int, array<string, mixed>> $leads
+ * @return array<int, array<string, mixed>>
+ */
+function siba_leads_annotate_related_customers(array $leads): array
+{
+    if ($leads === []) {
+        return $leads;
+    }
+
+    $cache = [];
+    foreach ($leads as $idx => $lead) {
+        $leads[$idx]['related_client_userid'] = 0;
+
+        $formalClient = (int) ($lead['client_userid'] ?? 0);
+        if ($formalClient > 0 || (string) ($lead['is_lead_client'] ?? '0') !== '0') {
+            // Already converted — formal client badge / URL take precedence.
+            continue;
+        }
+
+        $phone = $lead['phonenumber'] ?? '';
+        $norm  = siba_leads_normalize_phone($phone);
+        if ($norm === '') {
+            continue;
+        }
+        if (!array_key_exists($norm, $cache)) {
+            $cache[$norm] = siba_leads_find_client_id_by_phone($phone);
+        }
+        $leads[$idx]['related_client_userid'] = (int) $cache[$norm];
+    }
+
+    return $leads;
+}
+
+/**
  * Annotate kanban/list lead rows with phone_duplicate + phone_duplicate_of.
  *
  * @param array<int, array<string, mixed>> $leads

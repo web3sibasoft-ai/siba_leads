@@ -48,6 +48,21 @@ $hasMyActiveTask = $myActiveTasks > 0;
                         <span class="siba-lead-card__badge siba-lead-card__badge--client">
                             <?= _l('client'); ?>
                         </span>
+                        <?php } elseif (!empty($lead['related_client_userid'])) {
+                            $relatedClientId = (int) $lead['related_client_userid'];
+                            ?>
+                        <span class="siba-lead-card__badge siba-lead-card__badge--related-customer"
+                            data-toggle="tooltip"
+                            title="<?= e(_l('siba_leads_card_related_customer_tooltip', $relatedClientId)); ?>">
+                            <i class="fa-solid fa-user-check"></i>
+                            <?= e(_l('siba_leads_card_related_customer')); ?>
+                            <a href="<?= admin_url('clients/client/' . $relatedClientId); ?>"
+                                class="siba-lead-card__badge-link"
+                                onclick="event.stopPropagation();"
+                                onmousedown="event.stopPropagation();">
+                                #<?= $relatedClientId; ?>
+                            </a>
+                        </span>
                         <?php } ?>
                         <?php if ($hasMyActiveTask) { ?>
                         <span class="siba-lead-card__badge siba-lead-card__badge--task"
@@ -340,8 +355,12 @@ $hasMyActiveTask = $myActiveTasks > 0;
             <span><?= _l('siba_leads_card_has_order'); ?></span>
         </a>
         <?php } else {
-                $lead_order_url = ($lead_is_client && !empty($lead['client_userid']))
-                    ? admin_url('siba_license/show_add_orders/' . (int) $lead['client_userid'])
+                $orderCustomerId = (int) ($lead['client_userid'] ?? 0);
+                if ($orderCustomerId < 1) {
+                    $orderCustomerId = (int) ($lead['related_client_userid'] ?? 0);
+                }
+                $lead_order_url = $orderCustomerId > 0
+                    ? admin_url('siba_license/show_add_orders/' . $orderCustomerId)
                     : admin_url('siba_license/show_add_orders/' . (int) $lead['id'] . '/lead');
         ?>
         <a href="<?= e($lead_order_url); ?>"

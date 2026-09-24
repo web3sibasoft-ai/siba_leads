@@ -9,7 +9,18 @@ defined('BASEPATH') or exit('No direct script access allowed');
  */
 function siba_leads_reports_tabs(): array
 {
-    return ['incoming', 'sources', 'failures', 'conversion'];
+    return [
+        'incoming',
+        'sources',
+        'failures',
+        'conversion',
+        'pipeline',
+        'stage_time',
+        'speed',
+        'staff',
+        'aging',
+        'response',
+    ];
 }
 
 /**
@@ -188,6 +199,43 @@ function siba_leads_reports_parse_filters($input = null): array
                 : 'time';
         }
         $groupBy = ($axis === 'users') ? ['assigned'] : ['date'];
+    } elseif ($report === 'stage_time') {
+        // Always one row per pipeline column.
+        $axis    = 'status';
+        $groupBy = ['status'];
+    } elseif ($report === 'pipeline') {
+        $axis    = 'status';
+        $groupBy = ['status'];
+    } elseif ($report === 'speed') {
+        if (!in_array($axis, ['time', 'users', 'source'], true)) {
+            $axis = 'time';
+        }
+        if ($axis === 'users') {
+            $groupBy = ['assigned'];
+        } elseif ($axis === 'source') {
+            $groupBy = ['source'];
+        } else {
+            $groupBy = ['date'];
+            $axis    = 'time';
+        }
+    } elseif ($report === 'staff') {
+        $axis    = 'users';
+        $groupBy = ['assigned'];
+    } elseif ($report === 'aging') {
+        $axis    = 'status';
+        $groupBy = ['status'];
+    } elseif ($report === 'response') {
+        if (!in_array($axis, ['time', 'users', 'source'], true)) {
+            $axis = 'users';
+        }
+        if ($axis === 'time') {
+            $groupBy = ['date'];
+        } elseif ($axis === 'source') {
+            $groupBy = ['source'];
+        } else {
+            $groupBy = ['assigned'];
+            $axis    = 'users';
+        }
     } elseif ($report === 'sources') {
         if (!in_array($axis, ['time', 'source'], true)) {
             $axis = in_array('source', $groupBy, true) && !in_array('date', $groupBy, true)
@@ -1426,6 +1474,161 @@ function siba_leads_reports_chart_payload(string $report, array $rows, array $gr
         ], true);
     }
 
+    if ($report === 'stage_time') {
+        $categories = [];
+        $avgData    = [];
+        $colors     = [];
+        foreach ($rows as $row) {
+            $categories[] = (string) ($row['status_name'] ?? $row['dim_status_label'] ?? '—');
+            $avgData[]    = (float) ($row['avg_days'] ?? 0);
+            $color        = trim((string) ($row['status_color'] ?? ''));
+            $colors[]     = $color !== '' ? $color : '#1d4ed8';
+        }
+
+        $opts = siba_leads_reports_hc_shell('column', false);
+        $opts['xAxis']['categories'] = $categories;
+        $opts['yAxis']['title'] = [
+            'text'  => _l('siba_leads_reports_col_avg_days_in_column'),
+            'align' => 'high',
+            'offset'=> 0,
+            'rotation' => 0,
+            'y' => -10,
+            'style' => ['fontSize' => '12px', 'color' => '#6b7280'],
+        ];
+        $opts['yAxis']['min'] = 0;
+        $opts['series'] = [[
+            'name' => _l('siba_leads_reports_col_avg_days_in_column'),
+            'data' => siba_leads_reports_hc_column_points($avgData, $colors),
+            'colorByPoint' => true,
+        ]];
+        $opts['plotOptions']['column']['dataLabels'] = [
+            'enabled' => true,
+            'format'  => '{y}',
+        ];
+
+        return $opts;
+    }
+
+    if ($report === 'staff') {
+        $categories = [];
+        $leadsData  = [];
+        $salesData  = [];
+        $rateData   = [];
+        foreach ($rows as $row) {
+            $categories[] = (string) ($row['dim_assigned_label'] ?? '—');
+            $leadsData[]  = (int) ($row['lead_count'] ?? 0);
+            $salesData[]  = (int) ($row['sale_count'] ?? 0);
+            $rateData[]   = (float) ($row['conversion_rate'] ?? 0);
+        }
+
+        return $hcColumns($categories, [
+            [
+                'name'  => _l('siba_leads_reports_col_leads'),
+                'data'  => $leadsData,
+                'color' => '#64748b',
+                'yAxis' => 0,
+            ],
+            [
+                'name'  => _l('siba_leads_reports_col_sales'),
+                'data'  => $salesData,
+                'color' => '#22c55e',
+                'yAxis' => 0,
+            ],
+            [
+                'name'  => _l('siba_leads_reports_conversion_rate'),
+                'data'  => $rateData,
+                'type'  => 'spline',
+                'color' => '#1d4ed8',
+                'yAxis' => 1,
+            ],
+        ], true, [
+            [
+                'title' => ['text' => _l('siba_leads_reports_metric_count')],
+                'min'   => 0,
+            ],
+            [
+                'title'    => ['text' => '%'],
+                'opposite' => true,
+                'min'      => 0,
+                'max'      => 100,
+            ],
+        ]);
+    }
+
+    if ($report === 'aging') {
+        $categories = [];
+        $bucketKeys = ['b0_2', 'b3_7', 'b8_14', 'b15_30', 'b31'];
+        $bucketLang = [
+            'b0_2'   => _l('siba_leads_reports_aging_0_2'),
+            'b3_7'   => _l('siba_leads_reports_aging_3_7'),
+            'b8_14'  => _l('siba_leads_reports_aging_8_14'),
+            'b15_30' => _l('siba_leads_reports_aging_15_30'),
+            'b31'    => _l('siba_leads_reports_aging_31'),
+        ];
+        $seriesMap = [];
+        foreach ($bucketKeys as $bk) {
+            $seriesMap[$bk] = [];
+        }
+        foreach ($rows as $row) {
+            $categories[] = (string) ($row['status_name'] ?? $row['dim_status_label'] ?? '—');
+            foreach ($bucketKeys as $bk) {
+                $seriesMap[$bk][] = (int) ($row[$bk] ?? 0);
+            }
+        }
+        $paletteAging = ['#86efac', '#facc15', '#fb923c', '#f87171', '#be123c'];
+        $seriesDefs = [];
+        foreach ($bucketKeys as $i => $bk) {
+            $seriesDefs[] = [
+                'name'  => $bucketLang[$bk],
+                'data'  => $seriesMap[$bk],
+                'color' => $paletteAging[$i],
+                'stack' => 'aging',
+            ];
+        }
+        $opts = $hcColumns($categories, $seriesDefs, true);
+        $opts['plotOptions']['column']['stacking'] = 'normal';
+
+        return $opts;
+    }
+
+    if ($report === 'response') {
+        $categories = [];
+        $avgData    = [];
+        $pctData    = [];
+        foreach ($rows as $row) {
+            $categories[] = $labelFor($row);
+            $avgData[]    = (float) ($row['avg_days'] ?? 0);
+            $pctData[]    = (float) ($row['contacted_rate'] ?? 0);
+        }
+
+        return $hcColumns($categories, [
+            [
+                'name'  => _l('siba_leads_reports_col_avg_response_days'),
+                'data'  => $avgData,
+                'color' => '#7c3aed',
+                'yAxis' => 0,
+            ],
+            [
+                'name'  => _l('siba_leads_reports_col_contacted_rate'),
+                'data'  => $pctData,
+                'type'  => 'spline',
+                'color' => '#0f766e',
+                'yAxis' => 1,
+            ],
+        ], true, [
+            [
+                'title' => ['text' => _l('siba_leads_reports_col_avg_response_days')],
+                'min'   => 0,
+            ],
+            [
+                'title'    => ['text' => '%'],
+                'opposite' => true,
+                'min'      => 0,
+                'max'      => 100,
+            ],
+        ]);
+    }
+
     return null;
 }
 
@@ -1485,6 +1688,18 @@ function siba_leads_reports_run(array $filters, array $groupBy): array
             break;
         case 'speed':
             $result = siba_leads_reports_speed($filters, $groupBy);
+            break;
+        case 'stage_time':
+            $result = siba_leads_reports_stage_time($filters, $groupBy);
+            break;
+        case 'staff':
+            $result = siba_leads_reports_staff($filters, $groupBy);
+            break;
+        case 'aging':
+            $result = siba_leads_reports_aging($filters, $groupBy);
+            break;
+        case 'response':
+            $result = siba_leads_reports_response($filters, $groupBy);
             break;
         case 'sources':
             $result = siba_leads_reports_sources($filters, $groupBy);
@@ -1868,3 +2083,441 @@ function siba_leads_reports_sales(array $filters, array $groupBy): array
         ],
     ];
 }
+
+/**
+ * Average time leads remain in each kanban column (pipeline status).
+ *
+ * Ongoing: open cards → now − COALESCE(last_status_change, dateadded).
+ * Completed: status-change activity log segments (name → status id).
+ *
+ * @return array{rows:array, summary:array}
+ */
+function siba_leads_reports_stage_time(array $filters, array $groupBy): array
+{
+    $CI       = &get_instance();
+    $leadsT   = db_prefix() . 'leads';
+    $statusT  = db_prefix() . 'leads_status';
+    $logT     = db_prefix() . 'lead_activity_log';
+
+    $statuses = $CI->db->order_by('statusorder', 'ASC')->get($statusT)->result_array();
+    $byId     = [];
+    $nameToId = [];
+    foreach ($statuses as $st) {
+        $id = (int) ($st['id'] ?? 0);
+        if ($id < 1) {
+            continue;
+        }
+        $name = trim((string) ($st['name'] ?? ''));
+        $byId[$id] = [
+            'status_id'    => $id,
+            'status_name'  => $name !== '' ? $name : ('#' . $id),
+            'status_color' => (string) ($st['color'] ?? '#9ca3af'),
+            'statusorder'  => (int) ($st['statusorder'] ?? 0),
+            'open_count'   => 0,
+            'sum_open_days'=> 0.0,
+            'min_open_days'=> null,
+            'max_open_days'=> null,
+            'done_count'   => 0,
+            'sum_done_days'=> 0.0,
+            'min_done_days'=> null,
+            'max_done_days'=> null,
+        ];
+        if ($name !== '') {
+            $nameToId[mb_strtolower($name, 'UTF-8')] = $id;
+        }
+    }
+
+    // MySQL 8 rejects DATETIME compared to '' — treat NULL / zero-dates as missing.
+    $enteredExpr = 'CASE'
+        . ' WHEN l.last_status_change IS NOT NULL'
+        . " AND l.last_status_change >= '1971-01-01 00:00:00'"
+        . ' THEN l.last_status_change'
+        . ' ELSE l.dateadded END';
+    $daysExpr    = '(TIMESTAMPDIFF(SECOND, ' . $enteredExpr . ', NOW()) / 86400)';
+
+    $CI->db->select('l.status AS status_id, ' . $daysExpr . ' AS days_in_status, l.id', false);
+    $CI->db->from($leadsT . ' l');
+    $CI->db->where('l.lost', 0);
+    $CI->db->where('l.junk', 0);
+    if (function_exists('siba_leads_kanban_open_where_sql')) {
+        $CI->db->where(siba_leads_kanban_open_where_sql('l'), null, false);
+    } else {
+        $CI->db->where(
+            '(l.date_converted IS NULL OR l.date_converted < \'1971-01-01 00:00:00\')',
+            null,
+            false
+        );
+    }
+    $CI->db->where($enteredExpr . ' IS NOT NULL', null, false);
+    $CI->db->where($daysExpr . ' IS NOT NULL', null, false);
+    $CI->db->where($daysExpr . ' >= 0', null, false);
+    // Filter by when the card entered the current column (or was created).
+    siba_leads_reports_apply_common_filters($CI, $filters, $enteredExpr);
+
+    foreach ($CI->db->get()->result_array() as $row) {
+        $sid = (int) ($row['status_id'] ?? 0);
+        if ($sid < 1 || !isset($byId[$sid])) {
+            continue;
+        }
+        $days = max(0.0, (float) ($row['days_in_status'] ?? 0));
+        $byId[$sid]['open_count']++;
+        $byId[$sid]['sum_open_days'] += $days;
+        $byId[$sid]['min_open_days'] = $byId[$sid]['min_open_days'] === null
+            ? $days
+            : min($byId[$sid]['min_open_days'], $days);
+        $byId[$sid]['max_open_days'] = $byId[$sid]['max_open_days'] === null
+            ? $days
+            : max($byId[$sid]['max_open_days'], $days);
+    }
+
+    // Completed stays from status-change activity (best-effort; matches by status name).
+    if ($CI->db->table_exists($logT) && $nameToId !== []) {
+        $CI->db->reset_query();
+        $CI->db->select('a.leadid, a.additional_data, a.date, l.dateadded, l.assigned, l.source');
+        $CI->db->from($logT . ' a');
+        $CI->db->join($leadsT . ' l', 'l.id = a.leadid', 'inner');
+        $CI->db->where('a.description', 'not_lead_activity_status_updated');
+        siba_leads_reports_apply_common_filters($CI, $filters, 'a.date');
+        $CI->db->order_by('a.leadid', 'ASC');
+        $CI->db->order_by('a.date', 'ASC');
+        $CI->db->order_by('a.id', 'ASC');
+        $CI->db->limit(20000);
+        $logRows = $CI->db->get()->result_array();
+
+        $prevByLead = [];
+        foreach ($logRows as $log) {
+            $leadId = (int) ($log['leadid'] ?? 0);
+            if ($leadId < 1) {
+                continue;
+            }
+            $payload = @unserialize($log['additional_data'] ?? '');
+            if (!is_array($payload) || count($payload) < 3) {
+                continue;
+            }
+            $fromName = mb_strtolower(trim((string) $payload[1]), 'UTF-8');
+            $toName   = mb_strtolower(trim((string) $payload[2]), 'UTF-8');
+            $at       = strtotime((string) ($log['date'] ?? ''));
+            if ($at === false) {
+                continue;
+            }
+
+            if (!isset($prevByLead[$leadId])) {
+                $created = strtotime((string) ($log['dateadded'] ?? ''));
+                $prevByLead[$leadId] = $created !== false ? $created : $at;
+            }
+
+            $fromId = $nameToId[$fromName] ?? 0;
+            if ($fromId > 0 && isset($byId[$fromId])) {
+                $seconds = $at - (int) $prevByLead[$leadId];
+                if ($seconds >= 0) {
+                    $days = $seconds / 86400;
+                    $byId[$fromId]['done_count']++;
+                    $byId[$fromId]['sum_done_days'] += $days;
+                    $byId[$fromId]['min_done_days'] = $byId[$fromId]['min_done_days'] === null
+                        ? $days
+                        : min($byId[$fromId]['min_done_days'], $days);
+                    $byId[$fromId]['max_done_days'] = $byId[$fromId]['max_done_days'] === null
+                        ? $days
+                        : max($byId[$fromId]['max_done_days'], $days);
+                }
+            }
+
+            // Next segment starts when entering the new status.
+            $prevByLead[$leadId] = $at;
+            unset($toName);
+        }
+    }
+
+    $rows = [];
+    $totalOpen = 0;
+    $weightedOpen = 0.0;
+    $totalDone = 0;
+    $weightedDone = 0.0;
+
+    foreach ($byId as $row) {
+        $openCount = (int) $row['open_count'];
+        $doneCount = (int) $row['done_count'];
+        $avgOpen = $openCount > 0 ? round($row['sum_open_days'] / $openCount, 1) : 0.0;
+        $avgDone = $doneCount > 0 ? round($row['sum_done_days'] / $doneCount, 1) : 0.0;
+
+        // Prefer completed-stay average when available; else ongoing average.
+        $sampleCount = $doneCount + $openCount;
+        $avgCombined = 0.0;
+        if ($sampleCount > 0) {
+            $avgCombined = round(
+                (($avgDone * $doneCount) + ($avgOpen * $openCount)) / $sampleCount,
+                1
+            );
+        }
+
+        $rows[] = [
+            'status_id'       => $row['status_id'],
+            'status_name'     => $row['status_name'],
+            'status_color'    => $row['status_color'],
+            'dim_status'      => $row['status_id'],
+            'dim_status_label'=> $row['status_name'],
+            'open_count'      => $openCount,
+            'done_count'      => $doneCount,
+            'avg_open_days'   => $avgOpen,
+            'avg_done_days'   => $avgDone,
+            'avg_days'        => $avgCombined,
+            'min_days'        => $row['min_open_days'] !== null ? round((float) $row['min_open_days'], 1) : (
+                $row['min_done_days'] !== null ? round((float) $row['min_done_days'], 1) : 0.0
+            ),
+            'max_days'        => max(
+                $row['max_open_days'] !== null ? (float) $row['max_open_days'] : 0.0,
+                $row['max_done_days'] !== null ? (float) $row['max_done_days'] : 0.0
+            ),
+            'lead_count'      => $openCount,
+        ];
+
+        $totalOpen += $openCount;
+        $weightedOpen += $avgOpen * $openCount;
+        $totalDone += $doneCount;
+        $weightedDone += $avgDone * $doneCount;
+    }
+
+    $overallSamples = $totalOpen + $totalDone;
+    $overallAvg = 0.0;
+    if ($overallSamples > 0) {
+        $overallAvg = round(
+            (($weightedDone) + ($weightedOpen)) / $overallSamples,
+            1
+        );
+    }
+
+    return [
+        'rows'    => $rows,
+        'summary' => [
+            'lead_count'   => $totalOpen,
+            'open_count'   => $totalOpen,
+            'done_count'   => $totalDone,
+            'avg_days'     => $overallAvg,
+            'avg_open_days'=> $totalOpen > 0 ? round($weightedOpen / $totalOpen, 1) : 0.0,
+            'avg_done_days'=> $totalDone > 0 ? round($weightedDone / $totalDone, 1) : 0.0,
+        ],
+    ];
+}
+
+/**
+ * Staff performance: leads / sales / failures / conversion / avg days to sale.
+ *
+ * @return array{rows:array, summary:array}
+ */
+function siba_leads_reports_staff(array $filters, array $groupBy): array
+{
+    $groupBy = ['assigned'];
+    $analysis = siba_leads_reports_analysis($filters, $groupBy);
+    $speed    = siba_leads_reports_speed($filters, $groupBy);
+
+    $speedByAssigned = [];
+    foreach ($speed['rows'] as $row) {
+        $key = (string) ($row['dim_assigned'] ?? '');
+        $speedByAssigned[$key] = $row;
+    }
+
+    $rows = [];
+    foreach ($analysis['rows'] as $row) {
+        $key = (string) ($row['dim_assigned'] ?? '');
+        $spd = $speedByAssigned[$key] ?? null;
+        $row['avg_days'] = $spd ? (float) ($spd['avg_days'] ?? 0) : 0.0;
+        $row['min_days'] = $spd ? (int) ($spd['min_days'] ?? 0) : 0;
+        $row['max_days'] = $spd ? (int) ($spd['max_days'] ?? 0) : 0;
+        $rows[] = $row;
+    }
+
+    usort($rows, static function ($a, $b) {
+        return ((int) ($b['sale_count'] ?? 0)) <=> ((int) ($a['sale_count'] ?? 0));
+    });
+
+    return [
+        'rows'    => $rows,
+        'summary' => [
+            'lead_count'      => (int) ($analysis['summary']['lead_count'] ?? 0),
+            'sale_count'      => (int) ($analysis['summary']['sale_count'] ?? 0),
+            'fail_count'      => (int) ($analysis['summary']['fail_count'] ?? 0),
+            'open_count'      => (int) ($analysis['summary']['open_count'] ?? 0),
+            'conversion_rate' => (float) ($analysis['summary']['conversion_rate'] ?? 0),
+            'avg_days'        => (float) ($speed['summary']['avg_days'] ?? 0),
+        ],
+    ];
+}
+
+/**
+ * Open-lead aging by current column (days since last_status_change / dateadded).
+ *
+ * @return array{rows:array, summary:array}
+ */
+function siba_leads_reports_aging(array $filters, array $groupBy): array
+{
+    $CI      = &get_instance();
+    $leadsT  = db_prefix() . 'leads';
+    $statusT = db_prefix() . 'leads_status';
+
+    $statuses = $CI->db->order_by('statusorder', 'ASC')->get($statusT)->result_array();
+    $byId     = [];
+    foreach ($statuses as $st) {
+        $id = (int) ($st['id'] ?? 0);
+        if ($id < 1) {
+            continue;
+        }
+        $byId[$id] = [
+            'status_id'       => $id,
+            'status_name'     => trim((string) ($st['name'] ?? '')) ?: ('#' . $id),
+            'status_color'    => (string) ($st['color'] ?? '#9ca3af'),
+            'dim_status'      => $id,
+            'dim_status_label'=> trim((string) ($st['name'] ?? '')) ?: ('#' . $id),
+            'b0_2'            => 0,
+            'b3_7'            => 0,
+            'b8_14'           => 0,
+            'b15_30'          => 0,
+            'b31'             => 0,
+            'lead_count'      => 0,
+            'avg_days'        => 0.0,
+            '_sum_days'       => 0.0,
+        ];
+    }
+
+    $enteredExpr = 'CASE'
+        . ' WHEN l.last_status_change IS NOT NULL'
+        . " AND l.last_status_change >= '1971-01-01 00:00:00'"
+        . ' THEN l.last_status_change'
+        . ' ELSE l.dateadded END';
+    $daysExpr = '(TIMESTAMPDIFF(SECOND, ' . $enteredExpr . ', NOW()) / 86400)';
+
+    $CI->db->select('l.status AS status_id, ' . $daysExpr . ' AS days_in_status', false);
+    $CI->db->from($leadsT . ' l');
+    if (function_exists('siba_leads_kanban_open_where_sql')) {
+        $CI->db->where(siba_leads_kanban_open_where_sql('l'), null, false);
+    } else {
+        $CI->db->where('l.lost', 0);
+        $CI->db->where('l.junk', 0);
+    }
+    $CI->db->where($daysExpr . ' IS NOT NULL', null, false);
+    $CI->db->where($daysExpr . ' >= 0', null, false);
+    siba_leads_reports_apply_common_filters($CI, $filters, $enteredExpr);
+
+    $totals = ['b0_2' => 0, 'b3_7' => 0, 'b8_14' => 0, 'b15_30' => 0, 'b31' => 0];
+    $sumDays = 0.0;
+    $countAll = 0;
+
+    foreach ($CI->db->get()->result_array() as $row) {
+        $sid = (int) ($row['status_id'] ?? 0);
+        if ($sid < 1 || !isset($byId[$sid])) {
+            continue;
+        }
+        $days = max(0.0, (float) ($row['days_in_status'] ?? 0));
+        if ($days < 3) {
+            $bucket = 'b0_2';
+        } elseif ($days < 8) {
+            $bucket = 'b3_7';
+        } elseif ($days < 15) {
+            $bucket = 'b8_14';
+        } elseif ($days < 31) {
+            $bucket = 'b15_30';
+        } else {
+            $bucket = 'b31';
+        }
+        $byId[$sid][$bucket]++;
+        $byId[$sid]['lead_count']++;
+        $byId[$sid]['_sum_days'] += $days;
+        $totals[$bucket]++;
+        $sumDays += $days;
+        $countAll++;
+    }
+
+    $rows = [];
+    foreach ($byId as $row) {
+        $n = (int) $row['lead_count'];
+        $row['avg_days'] = $n > 0 ? round($row['_sum_days'] / $n, 1) : 0.0;
+        unset($row['_sum_days']);
+        $rows[] = $row;
+    }
+
+    return [
+        'rows'    => $rows,
+        'summary' => [
+            'lead_count' => $countAll,
+            'open_count' => $countAll,
+            'avg_days'   => $countAll > 0 ? round($sumDays / $countAll, 1) : 0.0,
+            'b0_2'       => $totals['b0_2'],
+            'b3_7'       => $totals['b3_7'],
+            'b8_14'      => $totals['b8_14'],
+            'b15_30'     => $totals['b15_30'],
+            'b31'        => $totals['b31'],
+        ],
+    ];
+}
+
+/**
+ * First-response speed: days from dateadded to lastcontact.
+ *
+ * @return array{rows:array, summary:array}
+ */
+function siba_leads_reports_response(array $filters, array $groupBy): array
+{
+    $CI      = &get_instance();
+    $leadsT  = db_prefix() . 'leads';
+    $bucket  = $filters['date_bucket'] ?? 'day';
+    if ($groupBy === []) {
+        $groupBy = ['assigned'];
+    }
+
+    $dateExpr = 'l.dateadded';
+    $dims     = siba_leads_reports_dimension_sql($groupBy, $dateExpr, $bucket, 'l');
+
+    $contactedExpr = '(l.lastcontact IS NOT NULL AND l.lastcontact >= \'1971-01-01 00:00:00\')';
+    $daysExpr = 'DATEDIFF(l.lastcontact, l.dateadded)';
+
+    $select = $dims['select'];
+    $select[] = 'COUNT(*) AS lead_count';
+    $select[] = 'SUM(CASE WHEN ' . $contactedExpr . ' THEN 1 ELSE 0 END) AS contacted_count';
+    $select[] = 'AVG(CASE WHEN ' . $contactedExpr . ' AND ' . $daysExpr . ' >= 0 THEN ' . $daysExpr . ' END) AS avg_days';
+    $select[] = 'MIN(CASE WHEN ' . $contactedExpr . ' AND ' . $daysExpr . ' >= 0 THEN ' . $daysExpr . ' END) AS min_days';
+    $select[] = 'MAX(CASE WHEN ' . $contactedExpr . ' AND ' . $daysExpr . ' >= 0 THEN ' . $daysExpr . ' END) AS max_days';
+
+    $CI->db->select(implode(', ', $select), false);
+    $CI->db->from($leadsT . ' l');
+    $CI->db->where('l.junk', 0);
+    siba_leads_reports_apply_common_filters($CI, $filters, $dateExpr);
+    if (!empty($dims['group'])) {
+        $CI->db->group_by($dims['group']);
+        if (in_array('date', $groupBy, true)) {
+            $CI->db->order_by('dim_date', 'ASC');
+        }
+    }
+
+    $rows = $CI->db->get()->result_array();
+    $sumLeads = 0;
+    $sumContacted = 0;
+    $weighted = 0.0;
+
+    foreach ($rows as &$row) {
+        $leads = (int) ($row['lead_count'] ?? 0);
+        $contacted = (int) ($row['contacted_count'] ?? 0);
+        $avg = round((float) ($row['avg_days'] ?? 0), 1);
+        $row['lead_count'] = $leads;
+        $row['contacted_count'] = $contacted;
+        $row['avg_days'] = $avg;
+        $row['min_days'] = (int) ($row['min_days'] ?? 0);
+        $row['max_days'] = (int) ($row['max_days'] ?? 0);
+        $row['contacted_rate'] = $leads > 0 ? round(($contacted / $leads) * 100, 1) : 0.0;
+        $row = siba_leads_reports_enrich_row($row, $groupBy, $bucket);
+        $sumLeads += $leads;
+        $sumContacted += $contacted;
+        $weighted += $avg * $contacted;
+    }
+    unset($row);
+
+    return [
+        'rows'    => $rows,
+        'summary' => [
+            'lead_count'      => $sumLeads,
+            'contacted_count' => $sumContacted,
+            'contacted_rate'  => $sumLeads > 0 ? round(($sumContacted / $sumLeads) * 100, 1) : 0.0,
+            'avg_days'        => $sumContacted > 0 ? round($weighted / $sumContacted, 1) : 0.0,
+        ],
+    ];
+}
+
+

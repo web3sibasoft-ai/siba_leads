@@ -95,7 +95,10 @@ class SibaLeadsKanban extends LeadsKanban
     {
         $leads = parent::get();
         if (function_exists('siba_leads_annotate_phone_duplicates')) {
-            return siba_leads_annotate_phone_duplicates($leads);
+            $leads = siba_leads_annotate_phone_duplicates($leads);
+        }
+        if (function_exists('siba_leads_annotate_related_customers')) {
+            $leads = siba_leads_annotate_related_customers($leads);
         }
 
         return $leads;
