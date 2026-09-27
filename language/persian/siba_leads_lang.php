@@ -19,6 +19,7 @@ $lang['siba_leads_permission_deleting_leads'] = 'حذف سرنخ‌ها';
 $lang['siba_leads_permission_restore_failed'] = 'بازگردانی لیدهای شکست‌خورده';
 $lang['siba_leads_permission_view_reports'] = 'مشاهده همه گزارش‌های لید';
 $lang['siba_leads_permission_report_prefix'] = 'گزارش:';
+$lang['siba_leads_permission_manage_teams'] = 'مدیریت تیم‌ها';
 $lang['siba_leads_viewing_own_only'] = 'فقط سرنخ‌هایی نمایش داده می‌شوند که به شما اختصاص یافته‌اند.';
 $lang['siba_leads_restored_from_failed'] = 'سرنخ با موفقیت به فهرست/کانبان عادی بازگردانده شد';
 $lang['siba_leads_activity_restored_from_failed'] = 'از وضعیت شکست‌خورده/از دست‌رفته توسط %s بازگردانده شد';

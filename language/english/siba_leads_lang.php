@@ -19,6 +19,7 @@ $lang['siba_leads_permission_deleting_leads'] = 'Deleting leads';
 $lang['siba_leads_permission_restore_failed'] = 'Restoring failed leads';
 $lang['siba_leads_permission_view_reports'] = 'View all lead reports';
 $lang['siba_leads_permission_report_prefix'] = 'Report:';
+$lang['siba_leads_permission_manage_teams'] = 'Managing teams';
 $lang['siba_leads_viewing_own_only'] = 'You can only see leads assigned to you.';
 $lang['siba_leads_restored_from_failed'] = 'Lead restored to the open pipeline successfully';
 $lang['siba_leads_activity_restored_from_failed'] = 'Restored from failed/lost by %s';

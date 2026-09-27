@@ -93,6 +93,14 @@ function siba_leads_can_view_all(): bool
 }
 
 /**
+ * Can the current staff open/manage the Teams settings page?
+ */
+function siba_leads_can_manage_teams(): bool
+{
+    return is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME);
+}
+
+/**
  * Can the current staff open the Lead reports area (any report page)?
  */
 function siba_leads_can_view_reports(): bool

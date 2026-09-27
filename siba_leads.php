@@ -120,6 +120,7 @@ function siba_leads_register_permissions()
         'delete'         => _l('siba_leads_permission_deleting_leads'),
         'restore_failed' => _l('siba_leads_permission_restore_failed'),
         'view_reports'   => _l('siba_leads_permission_view_reports'),
+        'manage_teams'   => _l('siba_leads_permission_manage_teams'),
     ];
 
     // Individual report pages (tabs). Staff need the matching capability, or view_reports for all.
@@ -162,8 +163,11 @@ function siba_leads_init_menu()
     $canReports = function_exists('siba_leads_can_view_reports')
         ? siba_leads_can_view_reports()
         : (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME));
+    $canTeams   = function_exists('siba_leads_can_manage_teams')
+        ? siba_leads_can_manage_teams()
+        : (is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME));
 
-    if (!$canView && !$canReports) {
+    if (!$canView && !$canReports && !$canTeams) {
         return;
     }
 
@@ -196,7 +200,7 @@ function siba_leads_init_menu()
         ]);
     }
 
-    if (is_admin()) {
+    if ($canTeams) {
         $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-teams',
             'name'     => _l('siba_leads_teams'),
@@ -204,17 +208,19 @@ function siba_leads_init_menu()
             'position' => 100,
         ]);
 
+        $CI->app_menu->add_setup_menu_item('siba-leads-teams', [
+            'name'     => _l('siba_leads_teams'),
+            'href'     => admin_url('siba_leads/teams'),
+            'position' => 36,
+        ]);
+    }
+
+    if (is_admin()) {
         $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-failure-reasons',
             'name'     => _l('siba_leads_failure_reasons'),
             'href'     => admin_url('siba_leads/failure_reasons'),
             'position' => 101,
-        ]);
-
-        $CI->app_menu->add_setup_menu_item('siba-leads-teams', [
-            'name'     => _l('siba_leads_teams'),
-            'href'     => admin_url('siba_leads/teams'),
-            'position' => 36,
         ]);
 
         $CI->app_menu->add_setup_menu_item('siba-leads-failure-reasons', [
@@ -239,8 +245,11 @@ function siba_leads_ensure_leads_menu_children($items)
     $canReports = function_exists('siba_leads_can_view_reports')
         ? siba_leads_can_view_reports()
         : (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME));
+    $canTeams   = function_exists('siba_leads_can_manage_teams')
+        ? siba_leads_can_manage_teams()
+        : (is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME));
 
-    if (!$canView && !$canReports) {
+    if (!$canView && !$canReports && !$canTeams) {
         return $items;
     }
 
@@ -298,7 +307,7 @@ function siba_leads_ensure_leads_menu_children($items)
             ];
         }
 
-        if (is_admin() && !in_array('siba-leads-teams', $slugs, true)) {
+        if ($canTeams && !in_array('siba-leads-teams', $slugs, true)) {
             $children[] = [
                 'parent_slug' => 'leads',
                 'slug'        => 'siba-leads-teams',
@@ -333,7 +342,15 @@ function siba_leads_ensure_leads_menu_children($items)
 
 function siba_leads_ensure_setup_teams_menu($items)
 {
-    if (!is_admin() || !is_array($items)) {
+    if (!is_array($items)) {
+        return $items;
+    }
+
+    $canTeams = function_exists('siba_leads_can_manage_teams')
+        ? siba_leads_can_manage_teams()
+        : (is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME));
+
+    if (!$canTeams && !is_admin()) {
         return $items;
     }
 
@@ -349,7 +366,7 @@ function siba_leads_ensure_setup_teams_menu($items)
         }
     }
 
-    if (!$haveTeams) {
+    if ($canTeams && !$haveTeams) {
         $items['siba-leads-teams'] = [
             'slug'       => 'siba-leads-teams',
             'name'       => _l('siba_leads_teams'),
@@ -362,7 +379,7 @@ function siba_leads_ensure_setup_teams_menu($items)
         ];
     }
 
-    if (!$haveReasons) {
+    if (is_admin() && !$haveReasons) {
         $items['siba-leads-failure-reasons'] = [
             'slug'       => 'siba-leads-failure-reasons',
             'name'       => _l('siba_leads_failure_reasons'),

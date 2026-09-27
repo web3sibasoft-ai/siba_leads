@@ -15,6 +15,10 @@ class Siba_leads extends AdminController
             if (!is_admin() && !siba_leads_can_view_reports()) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
+        } elseif ($method === 'teams') {
+            if (!siba_leads_can_manage_teams()) {
+                access_denied(SIBA_LEADS_MODULE_NAME);
+            }
         } elseif (!in_array($method, ['validate_phone', 'get_cities'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
@@ -539,7 +543,7 @@ class Siba_leads extends AdminController
      */
     public function teams()
     {
-        if (!is_admin()) {
+        if (!siba_leads_can_manage_teams()) {
             access_denied(SIBA_LEADS_MODULE_NAME);
         }
 
