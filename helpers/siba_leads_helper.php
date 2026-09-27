@@ -93,6 +93,82 @@ function siba_leads_can_view_all(): bool
 }
 
 /**
+ * Can the current staff open the Lead reports area (any report page)?
+ */
+function siba_leads_can_view_reports(): bool
+{
+    if (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME)) {
+        return true;
+    }
+
+    if (!function_exists('siba_leads_reports_tabs')) {
+        return false;
+    }
+
+    foreach (siba_leads_reports_tabs() as $tab) {
+        if (staff_can('report_' . $tab, SIBA_LEADS_MODULE_NAME)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Can the current staff view a specific report tab?
+ *
+ * @param string $report Tab key from siba_leads_reports_tabs()
+ */
+function siba_leads_can_view_report(string $report): bool
+{
+    if (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME)) {
+        return true;
+    }
+
+    $report = strtolower(trim($report));
+    if ($report === '') {
+        return false;
+    }
+
+    return staff_can('report_' . $report, SIBA_LEADS_MODULE_NAME);
+}
+
+/**
+ * Report tabs the current staff is allowed to open.
+ *
+ * @return string[]
+ */
+function siba_leads_allowed_report_tabs(): array
+{
+    $tabs = function_exists('siba_leads_reports_tabs') ? siba_leads_reports_tabs() : [];
+    if (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME)) {
+        return $tabs;
+    }
+
+    $allowed = [];
+    foreach ($tabs as $tab) {
+        if (staff_can('report_' . $tab, SIBA_LEADS_MODULE_NAME)) {
+            $allowed[] = $tab;
+        }
+    }
+
+    return $allowed;
+}
+
+/**
+ * First allowed report tab (for menu / redirects).
+ */
+function siba_leads_reports_default_tab(): string
+{
+    $allowed = siba_leads_allowed_report_tabs();
+    if (!empty($allowed)) {
+        return (string) $allowed[0];
+    }
+
+    return 'sources';
+}
+
+/**
  * Build a kanban query scoped for the Siba board.
  */
 function siba_leads_kanban_for_status($statusId): \modules\siba_leads\services\SibaLeadsKanban
@@ -440,6 +516,10 @@ function siba_leads_set_outcome($lead_id, $outcome, $how, array $extra = []): bo
         $payload['lost']                   = 1;
         $payload['junk']                   = 0;
         $payload['status']                 = 0;
+        // So core unmark_as_lost can restore a real pipeline status.
+        if ($fromStatus > 0) {
+            $payload['last_lead_status'] = $fromStatus;
+        }
     } else {
         $payload['siba_failure_reason_id']  = null;
         $payload['siba_failed_from_status'] = null;
@@ -483,6 +563,118 @@ function siba_leads_set_outcome($lead_id, $outcome, $how, array $extra = []): bo
             );
         }
     }
+
+    return true;
+}
+
+/**
+ * Restore a failed/lost lead back onto the open pipeline (kanban + normal leads).
+ * Clears Siba failed outcome fields and restores a real status column.
+ */
+function siba_leads_restore_from_failed($lead_id): bool
+{
+    $lead_id = (int) $lead_id;
+    if ($lead_id < 1) {
+        return false;
+    }
+
+    if (function_exists('siba_leads_ensure_lead_columns')) {
+        siba_leads_ensure_lead_columns();
+    }
+
+    $CI = &get_instance();
+    $table = db_prefix() . 'leads';
+    if (!$CI->db->table_exists($table)) {
+        return false;
+    }
+
+    $select = 'id, lost, junk, status, last_lead_status';
+    if ($CI->db->field_exists('siba_failed_from_status', $table)) {
+        $select .= ', siba_failed_from_status';
+    }
+    if ($CI->db->field_exists('siba_outcome', $table)) {
+        $select .= ', siba_outcome';
+    }
+
+    $lead = $CI->db->select($select)
+        ->from($table)
+        ->where('id', $lead_id)
+        ->get()
+        ->row_array();
+    if (!$lead) {
+        return false;
+    }
+
+    $restoreStatus = 0;
+    if (!empty($lead['siba_failed_from_status'])) {
+        $restoreStatus = (int) $lead['siba_failed_from_status'];
+    }
+    if ($restoreStatus < 1 && !empty($lead['last_lead_status'])) {
+        $restoreStatus = (int) $lead['last_lead_status'];
+    }
+    if ($restoreStatus < 1 && !empty($lead['status'])) {
+        $restoreStatus = (int) $lead['status'];
+    }
+    if ($restoreStatus < 1) {
+        if (!class_exists('leads_model', false)) {
+            $CI->load->model('leads_model');
+        }
+        $defaults = $CI->leads_model->get_status('', ['isdefault' => 1]);
+        if (!empty($defaults[0]['id'])) {
+            $restoreStatus = (int) $defaults[0]['id'];
+        } else {
+            $any = $CI->leads_model->get_status();
+            if (!empty($any[0]['id'])) {
+                $restoreStatus = (int) $any[0]['id'];
+            }
+        }
+    }
+    if ($restoreStatus < 1) {
+        return false;
+    }
+
+    $payload = [
+        'lost'               => 0,
+        'junk'               => 0,
+        'status'             => $restoreStatus,
+        'last_status_change' => date('Y-m-d H:i:s'),
+        'last_lead_status'   => $restoreStatus,
+    ];
+
+    if ($CI->db->field_exists('siba_outcome', $table)) {
+        $payload['siba_outcome'] = null;
+    }
+    if ($CI->db->field_exists('siba_outcome_at', $table)) {
+        $payload['siba_outcome_at'] = null;
+    }
+    if ($CI->db->field_exists('siba_outcome_by', $table)) {
+        $payload['siba_outcome_by'] = null;
+    }
+    if ($CI->db->field_exists('siba_outcome_how', $table)) {
+        $payload['siba_outcome_how'] = null;
+    }
+    if ($CI->db->field_exists('siba_failure_reason_id', $table)) {
+        $payload['siba_failure_reason_id'] = null;
+    }
+    if ($CI->db->field_exists('siba_failed_from_status', $table)) {
+        $payload['siba_failed_from_status'] = null;
+    }
+
+    $CI->db->where('id', $lead_id)->update($table, $payload);
+
+    if (!class_exists('leads_model', false)) {
+        $CI->load->model('leads_model');
+    }
+    $who = get_staff_user_id() > 0 ? get_staff_full_name(get_staff_user_id()) : _l('system_default_string');
+    $CI->leads_model->log_lead_activity(
+        $lead_id,
+        'siba_leads_activity_restored_from_failed',
+        false,
+        serialize([$who])
+    );
+    log_activity('Lead Restored From Failed/Lost [ID: ' . $lead_id . ']');
+
+    hooks()->do_action('siba_leads_restored_from_failed', $lead_id);
 
     return true;
 }
@@ -565,7 +757,7 @@ function siba_leads_outcome_banner_data($lead): ?array
 }
 
 /**
- * Render outcome banner into lead modal (after_lead_lead_tabs passes lead object).
+ * Render outcome banner into lead modal (full-width, above tab panes).
  *
  * @param object|array|int|null $lead
  */

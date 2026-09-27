@@ -9,7 +9,7 @@
                         <?= e($title); ?>
                     </h4>
                     <p class="text-muted tw-mb-0 tw-mt-1">
-                        <?= _l('siba_leads_kanban_desc'); ?>
+                        <?= $isKanBan ? _l('siba_leads_kanban_desc') : _l('siba_leads_list_desc'); ?>
                         <?php if (empty($can_view_all)) { ?>
                             <span class="tw-block tw-mt-1"><?= _l('siba_leads_viewing_own_only'); ?></span>
                         <?php } ?>
@@ -25,15 +25,16 @@
                                 <?= _l('new_lead'); ?>
                             </a>
                             <?php } ?>
-                            <?php if (is_admin() || get_option('allow_non_admin_members_to_import_leads') == '1') { ?>
-                            <a href="<?= admin_url('siba_leads/import'); ?>" class="btn btn-default">
-                                <i class="fa-solid fa-file-import"></i>
-                                <?= _l('import_leads'); ?>
-                            </a>
-                            <?php } ?>
-                            <a href="<?= admin_url('leads'); ?>" class="btn btn-default">
+                            <a href="<?= admin_url('siba_leads/switch_kanban/' . (int) $switch_kanban); ?>"
+                                class="btn btn-default !tw-px-3"
+                                data-toggle="tooltip"
+                                data-placement="top"
+                                data-title="<?= $isKanBan ? _l('switch_to_list_view') : _l('leads_switch_to_kanban'); ?>">
+                                <?php if ($isKanBan) { ?>
                                 <i class="fa-solid fa-table-list"></i>
-                                <?= _l('siba_leads_open_core_list'); ?>
+                                <?php } else { ?>
+                                <i class="fa-solid fa-grip-vertical"></i>
+                                <?php } ?>
                             </a>
                             <a href="<?= admin_url('siba_leads/failed'); ?>" class="btn btn-default">
                                 <i class="fa-solid fa-circle-xmark"></i>
@@ -46,6 +47,7 @@
                             </a>
                             <?php } ?>
                         </div>
+                        <?php if ($isKanBan) { ?>
                         <div class="leads-search" style="min-width: 240px;">
                             <div data-toggle="tooltip" data-placement="top"
                                 data-title="<?= _l('search_by_tags'); ?>">
@@ -56,9 +58,11 @@
                                 ], [], 'no-margin'); ?>
                             </div>
                         </div>
+                        <?php } ?>
                     </div>
                 </div>
 
+                <?php if ($isKanBan) { ?>
                 <?= form_hidden('sort_type', $sort_by); ?>
                 <?= form_hidden('sort', $sort); ?>
 
@@ -94,6 +98,62 @@
                         </div>
                     </div>
                 </div>
+                <?php } else { ?>
+                <div class="panel_s">
+                    <div class="panel-body">
+                        <div class="panel-table-full">
+                            <?php
+                            render_datatable([
+                                [
+                                    'name'     => _l('the_number_sign'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-number'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_name'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-name'],
+                                ],
+                                [
+                                    'name'     => _l('lead_company'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-company'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_phonenumber'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-phone'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_email'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-email'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_assigned'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-assigned'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_status'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-status'],
+                                ],
+                                [
+                                    'name'     => _l('leads_source'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-source'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_last_contact'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-last-contact'],
+                                ],
+                                [
+                                    'name'     => _l('leads_dt_datecreated'),
+                                    'th_attrs' => ['class' => 'toggleable date-created', 'id' => 'th-siba-date-created'],
+                                ],
+                            ], 'siba-leads', ['number-index-1'], [
+                                'id'                         => 'siba-leads',
+                                'data-last-order-identifier' => 'siba-leads',
+                                'data-default-order'         => get_table_last_order('siba-leads'),
+                            ]);
+                            ?>
+                        </div>
+                    </div>
+                </div>
+                <?php } ?>
             </div>
         </div>
     </div>
@@ -101,6 +161,10 @@
 <?php init_tail(); ?>
 <script>
 $(function () {
+<?php if ($isKanBan) { ?>
     siba_leads_kanban();
+<?php } else { ?>
+    initDataTable('.table-siba-leads', admin_url + 'siba_leads/table', undefined, undefined, undefined, [0, 'desc']);
+<?php } ?>
 });
 </script>

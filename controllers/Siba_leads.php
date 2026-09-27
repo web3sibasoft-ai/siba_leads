@@ -8,8 +8,14 @@ class Siba_leads extends AdminController
     {
         parent::__construct();
 
+        $this->load->helper(SIBA_LEADS_MODULE_NAME . '/siba_leads');
+
         $method = $this->router->method;
-        if (!in_array($method, ['validate_phone', 'get_cities'], true)) {
+        if ($method === 'reports') {
+            if (!is_admin() && !siba_leads_can_view_reports()) {
+                access_denied(SIBA_LEADS_MODULE_NAME);
+            }
+        } elseif (!in_array($method, ['validate_phone', 'get_cities'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
@@ -20,18 +26,22 @@ class Siba_leads extends AdminController
         }
 
         $this->load->model('leads_model');
-        $this->load->helper(SIBA_LEADS_MODULE_NAME . '/siba_leads');
     }
 
     public function index()
     {
         close_setup_menu();
 
-        $data['title']         = _l('siba_leads_kanban');
+        $isKanBan = !$this->session->has_userdata('siba_leads_kanban_view')
+            || $this->session->userdata('siba_leads_kanban_view') === 'true';
+
+        $data['title']         = $isKanBan ? _l('siba_leads_kanban') : _l('siba_leads_list');
         $data['statuses']      = $this->leads_model->get_status();
         $data['summary']       = siba_leads_get_summary();
         $data['base_currency'] = get_base_currency();
-        $data['bodyclass']     = 'kan-ban-body siba-leads-kanban-body';
+        $data['isKanBan']      = $isKanBan;
+        $data['switch_kanban'] = $isKanBan ? 0 : 1;
+        $data['bodyclass']     = $isKanBan ? 'kan-ban-body siba-leads-kanban-body' : 'siba-leads-list-body';
         $data['sort']          = get_option('default_leads_kanban_sort_type') ?: 'ASC';
         $data['sort_by']       = get_option('default_leads_kanban_sort') ?: 'dateadded';
         $data['can_view_all']  = siba_leads_can_view_all();
@@ -43,6 +53,137 @@ class Siba_leads extends AdminController
         $data['failure_reasons'] = $this->siba_leads_failure_reasons_model->get();
 
         $this->load->view('siba_leads/manage', $data);
+    }
+
+    /**
+     * Toggle between kanban and table list (own session key — does not affect core /admin/leads).
+     *
+     * @param int $set 1 = kanban, 0 = list
+     */
+    public function switch_kanban($set = 0)
+    {
+        $this->session->set_userdata([
+            'siba_leads_kanban_view' => ((int) $set === 1) ? 'true' : 'false',
+        ]);
+        redirect(previous_url() ?: admin_url('siba_leads'));
+    }
+
+    /**
+     * DataTables JSON for the list view (same open-lead scope as the kanban).
+     */
+    public function table()
+    {
+        if (!is_staff_member()) {
+            ajax_access_denied();
+        }
+
+        $this->load->helper('datatables');
+
+        $prefix = db_prefix();
+        $aColumns = [
+            $prefix . 'leads.id as id',
+            $prefix . 'leads.name as name',
+            $prefix . 'leads.company as company',
+            $prefix . 'leads.phonenumber as phonenumber',
+            $prefix . 'leads.email as email',
+            'firstname as assigned_firstname',
+            $prefix . 'leads_status.name as status_name',
+            $prefix . 'leads_sources.name as source_name',
+            $prefix . 'leads.lastcontact as lastcontact',
+            $prefix . 'leads.dateadded as dateadded',
+        ];
+
+        $sIndexColumn = 'id';
+        $sTable       = $prefix . 'leads';
+        $join = [
+            'LEFT JOIN ' . $prefix . 'staff ON ' . $prefix . 'staff.staffid = ' . $prefix . 'leads.assigned',
+            'LEFT JOIN ' . $prefix . 'leads_status ON ' . $prefix . 'leads_status.id = ' . $prefix . 'leads.status',
+            'LEFT JOIN ' . $prefix . 'leads_sources ON ' . $prefix . 'leads_sources.id = ' . $prefix . 'leads.source',
+        ];
+
+        $where = [
+            'AND ' . siba_leads_kanban_open_where_sql($prefix . 'leads'),
+        ];
+        if (!siba_leads_can_view_all()) {
+            $where[] = 'AND ' . $prefix . 'leads.assigned = ' . (int) get_staff_user_id();
+        }
+
+        $additionalSelect = [
+            $prefix . 'leads.assigned as assigned',
+            $prefix . 'leads.status as status',
+            $prefix . 'leads_status.color as color',
+            'lastname as assigned_lastname',
+        ];
+
+        $result  = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, $additionalSelect);
+        $output  = $result['output'];
+        $rResult = $result['rResult'];
+
+        foreach ($rResult as $aRow) {
+            $row = [];
+            $leadId = (int) $aRow['id'];
+
+            $row[] = '<a href="' . admin_url('leads/index/' . $leadId) . '" onclick="init_lead(' . $leadId . '); return false;">#'
+                . $leadId . '</a>';
+
+            $name = '<a href="' . admin_url('leads/index/' . $leadId) . '" onclick="init_lead(' . $leadId . '); return false;">'
+                . e($aRow['name']) . '</a>';
+            $name .= '<div class="row-options">';
+            $name .= '<a href="#" onclick="init_lead(' . $leadId . '); return false;">' . _l('view') . '</a>';
+            $name .= '</div>';
+            $row[] = $name;
+
+            $row[] = e($aRow['company'] ?? '');
+            $row[] = ($aRow['phonenumber'] !== '' && $aRow['phonenumber'] !== null)
+                ? '<a href="tel:' . e($aRow['phonenumber']) . '" dir="ltr">' . e($aRow['phonenumber']) . '</a>'
+                : '';
+            $row[] = ($aRow['email'] !== '' && $aRow['email'] !== null)
+                ? '<a href="mailto:' . e($aRow['email']) . '">' . e($aRow['email']) . '</a>'
+                : '';
+
+            $assignedOutput = '';
+            if ((int) ($aRow['assigned'] ?? 0) > 0) {
+                $fullName = e(trim(($aRow['assigned_firstname'] ?? '') . ' ' . ($aRow['assigned_lastname'] ?? '')));
+                $assignedOutput = '<a data-toggle="tooltip" data-title="' . $fullName . '" href="'
+                    . admin_url('profile/' . (int) $aRow['assigned']) . '">'
+                    . staff_profile_image((int) $aRow['assigned'], ['staff-profile-image-small']) . '</a>';
+                $assignedOutput .= '<span class="hide">' . $fullName . '</span>';
+            } else {
+                $assignedOutput = e(_l('siba_leads_unassigned'));
+            }
+            $row[] = $assignedOutput;
+
+            $color = (string) ($aRow['color'] ?? '');
+            if ($aRow['status_name'] !== null && $aRow['status_name'] !== '') {
+                $row[] = '<span class="label' . ($color === '' ? ' label-default' : '') . '" style="'
+                    . ($color !== ''
+                        ? 'color:' . e($color) . ';border:1px solid ' . e(adjust_hex_brightness($color, 0.4))
+                          . ';background:' . e(adjust_hex_brightness($color, 0.04)) . ';'
+                        : '')
+                    . '">' . e($aRow['status_name']) . '</span>';
+            } else {
+                $row[] = '—';
+            }
+
+            $row[] = e($aRow['source_name'] ?? '');
+
+            $last = $aRow['lastcontact'] ?? '';
+            $row[] = ($last === '0000-00-00 00:00:00' || !is_date($last))
+                ? ''
+                : '<span data-toggle="tooltip" data-title="' . e(_dt($last)) . '" class="text-has-action is-date">'
+                    . e(time_ago($last)) . '</span>';
+
+            $added = $aRow['dateadded'] ?? '';
+            $row[] = is_date($added)
+                ? '<span data-toggle="tooltip" data-title="' . e(_dt($added)) . '" class="text-has-action is-date">'
+                    . e(time_ago($added)) . '</span>'
+                : '';
+
+            $row['DT_RowId'] = 'lead_' . $leadId;
+            $output['aaData'][] = $row;
+        }
+
+        echo json_encode($output);
     }
 
     /**
@@ -262,6 +403,10 @@ class Siba_leads extends AdminController
     {
         close_setup_menu();
 
+        if (!siba_leads_can_view_reports()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
         if (function_exists('siba_leads_ensure_lead_columns')) {
             siba_leads_ensure_lead_columns();
         }
@@ -273,6 +418,15 @@ class Siba_leads extends AdminController
         $this->load->model('staff_model');
 
         $filters = siba_leads_reports_parse_filters($this->input);
+        $allowedTabs = siba_leads_allowed_report_tabs();
+        if (empty($allowedTabs)) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        if (!in_array($filters['report'], $allowedTabs, true)) {
+            $filters['report'] = $allowedTabs[0];
+        }
+
         $groupBy = $filters['group_by'];
 
         $result = siba_leads_reports_run($filters, $groupBy);
@@ -292,7 +446,7 @@ class Siba_leads extends AdminController
         $data['sources']   = $this->leads_model->get_source();
         $data['tags']      = function_exists('get_tags') ? get_tags() : [];
         $data['can_view_all'] = siba_leads_can_view_all();
-        $data['report_tabs']  = siba_leads_reports_tabs();
+        $data['report_tabs']  = $allowedTabs;
         $data['team_options'] = [];
         if (function_exists('siba_leads_team_definitions')) {
             foreach (siba_leads_team_definitions() as $key => $def) {

@@ -489,7 +489,22 @@
     function fixLeadModalStatusSourceFields($modal) {
         $modal.find('.form-group-select-input-status, .form-group-select-input-source').each(function () {
             var $wrap = $(this);
-            $wrap.removeClass('select-placeholder');
+            // Drop Perfex loading skeleton so the empty bordered ::after box disappears.
+            $wrap.removeClass('select-placeholder').addClass('siba-inline-select-ready');
+            $wrap.find('.select-placeholder').removeClass('select-placeholder');
+
+            var $group = $wrap.children('.input-group').first();
+            if (!$group.length) {
+                $group = $wrap.find('.input-group').first();
+            }
+            if ($group.length) {
+                $group.css({
+                    display: 'flex',
+                    width: '100%',
+                    visibility: 'visible',
+                    opacity: '1'
+                });
+            }
 
             var $select = $wrap.find('select.selectpicker').first();
             if (!$select.length) {
@@ -501,10 +516,20 @@
                     showSubtext: true,
                     width: '100%'
                 });
-                return;
+            } else {
+                $select.selectpicker('refresh');
             }
 
-            $select.selectpicker('refresh');
+            $wrap.removeClass('select-placeholder');
+            var $bs = $select.parent('.bootstrap-select');
+            if ($bs.length) {
+                $bs.css({
+                    flex: '1 1 auto',
+                    width: 'auto',
+                    minWidth: 0,
+                    maxWidth: '100%'
+                });
+            }
         });
     }
 
@@ -2027,6 +2052,43 @@
         }, 50);
     });
 
+    /**
+     * Reload the tasks DataTable inside the open lead modal (status/priority changes).
+     * Uses the table node (not a global string selector) so modal-scoped DTs refresh reliably.
+     */
+    function refreshLeadModalTasksTable() {
+        var $modal = $('#lead-modal');
+        if (!$modal.length || !$modal.is(':visible')) {
+            return;
+        }
+
+        var reloaded = false;
+        $modal.find('table.table-rel-tasks-leads, table#related_tasks').each(function () {
+            if ($.fn.DataTable && $.fn.DataTable.isDataTable(this)) {
+                try {
+                    $(this).DataTable().ajax.reload(null, false);
+                    reloaded = true;
+                } catch (e) {
+                    // ignore destroyed tables
+                }
+            }
+        });
+
+        if (!reloaded && typeof reload_tasks_tables === 'function') {
+            try {
+                reload_tasks_tables();
+            } catch (e2) {
+                // ignore
+            }
+        }
+
+        // Close any open status/priority dropdown leftover after redraw.
+        $modal.find('.dropdown.open').removeClass('open');
+    }
+
+    // Expose for core main.js if present.
+    window.reload_lead_modal_tasks_table = refreshLeadModalTasksTable;
+
     $(document).ajaxComplete(function (event, xhr, settings) {
         if (!settings || !settings.url) {
             return;
@@ -2044,6 +2106,43 @@
             setTimeout(function () {
                 applyLeadAssigneeToNewTask($('#_task_modal'));
             }, 150);
+        }
+
+        // Clear stuck Perfex .dt-loader after task assignee/status AJAX (job can succeed while overlay remains).
+        if (settings.url.indexOf('tasks/mark_as') !== -1
+            || settings.url.indexOf('tasks/unmark_complete') !== -1
+            || settings.url.indexOf('tasks/change_priority') !== -1
+            || settings.url.indexOf('tasks/add_task_assignees') !== -1
+            || settings.url.indexOf('tasks/add_task_followers') !== -1
+            || settings.url.indexOf('tasks/remove_assignee') !== -1
+            || settings.url.indexOf('tasks/remove_follower') !== -1) {
+            $("body").find(".dt-loader").remove();
+            if (typeof init_selectpicker === 'function' && $('#task-modal').is(':visible')) {
+                init_selectpicker();
+            }
+            // Lead modal tasks grid: status/priority changes must redraw without a full page refresh.
+            if ($('#lead-modal').is(':visible')
+                && xhr
+                && xhr.status >= 200
+                && xhr.status < 300
+                && (settings.url.indexOf('tasks/mark_as') !== -1
+                    || settings.url.indexOf('tasks/unmark_complete') !== -1
+                    || settings.url.indexOf('tasks/change_priority') !== -1)) {
+                setTimeout(function () {
+                    refreshLeadModalTasksTable();
+                }, 50);
+            }
+        }
+    });
+
+    $(document).ajaxError(function (event, xhr, settings) {
+        if (!settings || !settings.url) {
+            return;
+        }
+        if (settings.url.indexOf('tasks/mark_as') !== -1
+            || settings.url.indexOf('tasks/add_task_assignees') !== -1
+            || settings.url.indexOf('tasks/add_task_followers') !== -1) {
+            $("body").find(".dt-loader").remove();
         }
     });
 
@@ -2265,6 +2364,42 @@
     // Require a failure reason instead of core reasonless mark_as_lost.
     window.lead_mark_as_lost = function (id) {
         window.siba_leads_open_mark_failed(id);
+    };
+
+    // Restore failed/lost: clear Siba outcome + refresh board/list after core endpoint.
+    window.lead_unmark_as_lost = function (id) {
+        requestGetJSON('leads/unmark_as_lost/' + id)
+            .done(function (response) {
+                if (response.success === true || response.success == 'true') {
+                    alert_float('success', response.message);
+                    if (typeof _lead_init_data === 'function') {
+                        _lead_init_data(response, response.id);
+                    }
+                    if (typeof siba_leads_kanban === 'function' && $('#kan-ban').length) {
+                        siba_leads_kanban();
+                    } else if (typeof leads_kanban === 'function' && $('#kan-ban').length) {
+                        leads_kanban();
+                    }
+                    if (typeof table_leads !== 'undefined' && table_leads && table_leads.DataTable) {
+                        try { table_leads.DataTable().ajax.reload(null, false); } catch (e) { /* ignore */ }
+                    }
+                    if ($('.table-siba-leads').length && $.fn.DataTable && $.fn.DataTable.isDataTable('.table-siba-leads')) {
+                        try { $('.table-siba-leads').DataTable().ajax.reload(null, false); } catch (e2) { /* ignore */ }
+                    }
+                    // Failed archive page: drop the restored row.
+                    $('table.table-siba-failed-leads tr').each(function () {
+                        var href = $(this).find('a[onclick*="init_lead("]').attr('onclick') || '';
+                        if (href.indexOf('init_lead(' + id + ')') !== -1) {
+                            $(this).fadeOut(200, function () { $(this).remove(); });
+                        }
+                    });
+                } else {
+                    alert_float('danger', (response && response.message) ? response.message : 'Error');
+                }
+            })
+            .fail(function (error) {
+                alert_float('danger', error.responseText || 'Error');
+            });
     };
 
     function siba_leads_relabel_mark_lost_menu() {

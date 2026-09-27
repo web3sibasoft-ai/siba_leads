@@ -884,6 +884,28 @@ body.modal-open .datepicker-plot-area {
     margin-bottom: 4px;
 }
 
+/* Failed/success outcome banner: full width under tabs (not inside nav-tabs) */
+#lead-modal .tab-content {
+    display: flex;
+    flex-direction: column;
+}
+
+#lead-modal .tab-content > .siba-leads-outcome-banner {
+    order: -1;
+    width: 100%;
+    max-width: 100%;
+    display: block;
+    box-sizing: border-box;
+    clear: both;
+    margin: 0 0 12px;
+}
+
+#lead-modal .siba-leads-outcome-banner {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 #lead-modal .nav-tabs-segmented {
     display: flex;
     flex-wrap: nowrap;
@@ -1046,16 +1068,30 @@ body.modal-open .datepicker-plot-area {
     box-shadow: none;
 }
 
-/* Status/source fields: undo Perfex select-placeholder skeleton on inline-add wrappers */
+/* Status/source: kill Perfex select-placeholder skeleton (empty bordered ::after)
+   that otherwise sits beside the real dropdown + "add" button. */
 #lead-modal .lead-edit .form-group-select-input-status,
 #lead-modal .lead-edit .form-group-select-input-source {
     margin-bottom: 14px;
+    position: relative;
 }
 
+#lead-modal .lead-edit .form-group-select-input-status::after,
+#lead-modal .lead-edit .form-group-select-input-source::after,
 #lead-modal .lead-edit .form-group-select-input-status.select-placeholder::after,
 #lead-modal .lead-edit .form-group-select-input-source.select-placeholder::after {
-    display: none !important;
     content: none !important;
+    display: none !important;
+    width: 0 !important;
+    max-width: 0 !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status.select-placeholder label,
@@ -1068,22 +1104,33 @@ body.modal-open .datepicker-plot-area {
     display: block;
 }
 
-#lead-modal .lead-edit .form-group-select-input-status.select-placeholder .input-group,
-#lead-modal .lead-edit .form-group-select-input-source.select-placeholder .input-group,
 #lead-modal .lead-edit .form-group-select-input-status .input-group,
-#lead-modal .lead-edit .form-group-select-input-source .input-group {
+#lead-modal .lead-edit .form-group-select-input-source .input-group,
+#lead-modal .lead-edit .form-group-select-input-status.select-placeholder .input-group,
+#lead-modal .lead-edit .form-group-select-input-source.select-placeholder .input-group {
     display: flex !important;
-    width: 100%;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
     align-items: stretch;
+    float: none;
 }
 
-#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select,
-#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: 1% !important;
-    max-width: 100%;
-    float: none;
+#lead-modal .lead-edit .form-group-select-input-status .input-group > .bootstrap-select,
+#lead-modal .lead-edit .form-group-select-input-source .input-group > .bootstrap-select {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    float: none !important;
+}
+
+#lead-modal .lead-edit .form-group-select-input-status .input-group > .input-group-btn,
+#lead-modal .lead-edit .form-group-select-input-source .input-group > .input-group-btn {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    display: flex !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .dropdown-toggle,
@@ -1100,7 +1147,9 @@ body.modal-open .datepicker-plot-area {
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .input-group > select.selectpicker,
-#lead-modal .lead-edit .form-group-select-input-source .input-group > select.selectpicker {
+#lead-modal .lead-edit .form-group-select-input-source .input-group > select.selectpicker,
+#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select > select.selectpicker,
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select > select.selectpicker {
     display: none !important;
 }
 

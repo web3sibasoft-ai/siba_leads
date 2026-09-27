@@ -19,12 +19,12 @@
                                     $reasons ?? [],
                                     ['id', 'title'],
                                     'siba_leads_failure_reason',
-                                    $filters['reason_id'] ?? '',
-                                    [],
+                                    !empty($filters['reason_id']) ? (int) $filters['reason_id'] : '',
+                                    ['data-none-selected-text' => _l('dropdown_non_selected_tex')],
                                     [],
                                     '',
                                     '',
-                                    false
+                                    true
                                 ); ?>
                             </div>
                             <div class="col-md-3">
@@ -33,12 +33,12 @@
                                     $staff ?? [],
                                     ['staffid', ['firstname', 'lastname']],
                                     'siba_leads_outcome_by',
-                                    $filters['outcome_by'] ?? '',
-                                    [],
+                                    !empty($filters['outcome_by']) ? (int) $filters['outcome_by'] : '',
+                                    ['data-none-selected-text' => _l('dropdown_non_selected_tex')],
                                     [],
                                     '',
                                     '',
-                                    false
+                                    true
                                 ); ?>
                             </div>
                             <div class="col-md-3">
@@ -47,12 +47,12 @@
                                     $staff ?? [],
                                     ['staffid', ['firstname', 'lastname']],
                                     'leads_dt_assigned',
-                                    $filters['assigned'] ?? '',
-                                    [],
+                                    !empty($filters['assigned']) ? (int) $filters['assigned'] : '',
+                                    ['data-none-selected-text' => _l('dropdown_non_selected_tex')],
                                     [],
                                     '',
                                     '',
-                                    false
+                                    true
                                 ); ?>
                             </div>
                             <div class="col-md-3">
@@ -88,9 +88,19 @@
                                 </div>
                             </div>
                             <div class="col-md-3">
-                                <?= render_input('q', 'search', $filters['q'] ?? '', 'search'); ?>
+                            <?= render_input(
+                                'q',
+                                'search',
+                                $filters['q'] ?? '',
+                                'search'
+                            ); ?>
+
+                            <p class="text-muted tw-text-sm">
+                                <?= e(_l('siba_leads_failed_search_hint')); ?>
+                            </p>
+                                
                             </div>
-                            <div class="col-md-6 tw-flex tw-items-end tw-gap-2" style="padding-bottom:15px;">
+                            <div class="col-md-6 tw-flex tw-items-end tw-gap-2" style="padding-top:25px;">
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fa fa-filter"></i> <?= _l('filter'); ?>
                                 </button>

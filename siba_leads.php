@@ -16,6 +16,7 @@ define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.g
 hooks()->add_action('modules_loaded', 'siba_leads_load_helpers');
 hooks()->add_action('admin_init', 'siba_leads_init_menu');
 hooks()->add_action('admin_init', 'siba_leads_register_permissions');
+hooks()->add_filter('staff_permissions', 'siba_leads_filter_staff_permissions');
 hooks()->add_action('admin_init', 'siba_leads_mark_csv_import_window');
 hooks()->add_action('admin_init', 'siba_leads_guard_duplicate_phone', 1);
 hooks()->add_action('app_admin_head', 'siba_leads_load_admin_css');
@@ -40,7 +41,7 @@ hooks()->add_action('after_lead_updated', 'siba_leads_action_website_lead_update
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_profile_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_form_meta_seed');
-hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_outcome_banner');
+hooks()->add_action('after_lead_tabs_content', 'siba_leads_lead_modal_outcome_banner');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
 hooks()->add_filter('not_importable_leads_fields', 'siba_leads_not_importable_leads_fields');
@@ -116,8 +117,18 @@ function siba_leads_register_permissions()
         'view_all' => _l('permission_view') . ' (' . _l('permission_global') . ')',
         'create'   => _l('permission_create'),
         'edit'     => _l('permission_edit'),
-        'delete'   => _l('permission_delete'),
+        'delete'         => _l('siba_leads_permission_deleting_leads'),
+        'restore_failed' => _l('siba_leads_permission_restore_failed'),
+        'view_reports'   => _l('siba_leads_permission_view_reports'),
     ];
+
+    // Individual report pages (tabs). Staff need the matching capability, or view_reports for all.
+    if (function_exists('siba_leads_reports_tabs')) {
+        foreach (siba_leads_reports_tabs() as $tab) {
+            $labelKey = 'siba_leads_reports_' . $tab;
+            $capabilities['capabilities']['report_' . $tab] = _l('siba_leads_permission_report_prefix') . ' ' . _l($labelKey);
+        }
+    }
 
     register_staff_capabilities(
         SIBA_LEADS_MODULE_NAME,
@@ -126,35 +137,64 @@ function siba_leads_register_permissions()
     );
 }
 
+/**
+ * Rename core Leads → Delete capability title to "Deleting leads".
+ * The lead modal delete button is gated by staff_can('delete', 'leads').
+ *
+ * @param array $permissions
+ * @param array $data
+ * @return array
+ */
+function siba_leads_filter_staff_permissions($permissions, $data = [])
+{
+    if (isset($permissions['leads']['capabilities']['delete'])) {
+        $permissions['leads']['capabilities']['delete'] = _l('siba_leads_permission_deleting_leads');
+    }
+
+    return $permissions;
+}
+
 function siba_leads_init_menu()
 {
     $CI = &get_instance();
 
-    if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
+    $canView    = is_admin() || staff_can('view', SIBA_LEADS_MODULE_NAME);
+    $canReports = function_exists('siba_leads_can_view_reports')
+        ? siba_leads_can_view_reports()
+        : (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME));
+
+    if (!$canView && !$canReports) {
         return;
     }
 
     // Registered early; siba_leads_ensure_leads_menu_children re-injects after menu_setup.
-    $CI->app_menu->add_sidebar_children_item('leads', [
-        'slug'     => 'siba-leads-workspace',
-        'name'     => _l('siba_leads_workspace'),
-        'href'     => admin_url('siba_leads'),
-        'position' => 99,
-    ]);
+    if ($canView) {
+        $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-workspace',
+            'name'     => _l('siba_leads_workspace'),
+            'href'     => admin_url('siba_leads'),
+            'position' => 99,
+        ]);
 
-    $CI->app_menu->add_sidebar_children_item('leads', [
-        'slug'     => 'siba-leads-failed',
-        'name'     => _l('siba_leads_failed'),
-        'href'     => admin_url('siba_leads/failed'),
-        'position' => 98,
-    ]);
+        $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-failed',
+            'name'     => _l('siba_leads_failed'),
+            'href'     => admin_url('siba_leads/failed'),
+            'position' => 98,
+        ]);
+    }
 
-    $CI->app_menu->add_sidebar_children_item('leads', [
-        'slug'     => 'siba-leads-reports',
-        'name'     => _l('siba_leads_reports'),
-        'href'     => admin_url('siba_leads/reports?report=sources'),
-        'position' => 97,
-    ]);
+    if ($canReports) {
+        $defaultReport = function_exists('siba_leads_reports_default_tab')
+            ? siba_leads_reports_default_tab()
+            : 'sources';
+        $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-reports',
+            'name'     => _l('siba_leads_reports'),
+            'href'     => admin_url('siba_leads/reports?report=' . $defaultReport),
+            'position' => 97,
+        ]);
+    }
 
     if (is_admin()) {
         $CI->app_menu->add_sidebar_children_item('leads', [
@@ -195,8 +235,12 @@ function siba_leads_ensure_leads_menu_children($items)
         return $items;
     }
 
-    $canView = is_admin() || staff_can('view', SIBA_LEADS_MODULE_NAME);
-    if (!$canView) {
+    $canView    = is_admin() || staff_can('view', SIBA_LEADS_MODULE_NAME);
+    $canReports = function_exists('siba_leads_can_view_reports')
+        ? siba_leads_can_view_reports()
+        : (is_admin() || staff_can('view_reports', SIBA_LEADS_MODULE_NAME));
+
+    if (!$canView && !$canReports) {
         return $items;
     }
 
@@ -212,7 +256,7 @@ function siba_leads_ensure_leads_menu_children($items)
         $children = $items[$key]['children'];
         $slugs    = array_column($children, 'slug');
 
-        if (!in_array('siba-leads-workspace', $slugs, true)) {
+        if ($canView && !in_array('siba-leads-workspace', $slugs, true)) {
             $children[] = [
                 'parent_slug' => 'leads',
                 'slug'        => 'siba-leads-workspace',
@@ -225,7 +269,7 @@ function siba_leads_ensure_leads_menu_children($items)
             ];
         }
 
-        if (!in_array('siba-leads-failed', $slugs, true)) {
+        if ($canView && !in_array('siba-leads-failed', $slugs, true)) {
             $children[] = [
                 'parent_slug' => 'leads',
                 'slug'        => 'siba-leads-failed',
@@ -238,12 +282,15 @@ function siba_leads_ensure_leads_menu_children($items)
             ];
         }
 
-        if (!in_array('siba-leads-reports', $slugs, true)) {
+        if ($canReports && !in_array('siba-leads-reports', $slugs, true)) {
+            $defaultReport = function_exists('siba_leads_reports_default_tab')
+                ? siba_leads_reports_default_tab()
+                : 'sources';
             $children[] = [
                 'parent_slug' => 'leads',
                 'slug'        => 'siba-leads-reports',
                 'name'        => _l('siba_leads_reports'),
-                'href'        => admin_url('siba_leads/reports?report=sources'),
+                'href'        => admin_url('siba_leads/reports?report=' . $defaultReport),
                 'position'    => 97,
                 'icon'        => '',
                 'badge'       => [],
@@ -333,7 +380,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260917t') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20260927c') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -424,7 +471,7 @@ function siba_leads_load_admin_js()
 
     $CI->load->view('siba_leads/partials/mark_failed_modal', ['reasons' => $failureReasons]);
 
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260917g') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20260927d') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

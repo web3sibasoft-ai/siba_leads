@@ -39,10 +39,14 @@ echo "=== Siba Leads Kanban — static operation wiring ===" . PHP_EOL;
 
 // Toolbar
 check('New lead button', file_has($manage, 'init_lead();'));
-check('Import leads link', file_has($manage, "admin_url('siba_leads/import')"));
-check('Core leads list link', file_has($manage, "admin_url('leads')"));
+check('Kanban/list switch control', file_has($manage, "admin_url('siba_leads/switch_kanban/"));
+check('Import toolbar button removed', !file_has($manage, "admin_url('siba_leads/import')"));
+check('Core leads list toolbar button removed', !file_has($manage, "admin_url('leads')"));
+check('List DataTable endpoint', file_has($manage, "admin_url + 'siba_leads/table'"));
 check('Teams link (admin)', file_has($manage, "admin_url('siba_leads/teams')"));
 check('Search input refreshes board', file_has($manage, 'siba_leads_kanban();'));
+check('Controller switch_kanban()', file_has($ctrl, 'function switch_kanban'));
+check('Controller table()', file_has($ctrl, 'function table()'));
 
 // Sort
 check('Sort by dateadded', file_has($manage, "siba_leads_kanban_sort('dateadded')"));
