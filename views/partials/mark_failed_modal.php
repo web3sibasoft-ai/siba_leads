@@ -28,6 +28,12 @@
                         <?php } ?>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label for="siba-leads-fail-description" class="control-label">
+                        <?= e(_l('siba_leads_failure_description')); ?>
+                    </label>
+                    <textarea id="siba-leads-fail-description" name="failure_description" class="form-control" rows="3" placeholder="<?= e(_l('siba_leads_failure_description_placeholder')); ?>"></textarea>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal"><?= _l('close'); ?></button>

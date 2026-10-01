@@ -170,6 +170,11 @@
                                                     <?php } else { ?>
                                                         —
                                                     <?php } ?>
+                                                    <?php if (!empty($row['siba_failure_description'])) { ?>
+                                                        <div class="text-muted tw-text-xs tw-mt-1.5 tw-whitespace-pre-line siba-lead-fail-desc" style="max-width: 280px;" title="<?= e($row['siba_failure_description']); ?>">
+                                                            <i class="fa-regular fa-comment-dots text-danger"></i> <?= e($row['siba_failure_description']); ?>
+                                                        </div>
+                                                    <?php } ?>
                                                 </td>
                                                 <td><?= e(siba_leads_outcome_how_label($row['siba_outcome_how'] ?? '')); ?></td>
                                                 <td>

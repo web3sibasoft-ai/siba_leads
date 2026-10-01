@@ -492,6 +492,11 @@
             // Drop Perfex loading skeleton so the empty bordered ::after box disappears.
             $wrap.removeClass('select-placeholder').addClass('siba-inline-select-ready');
             $wrap.find('.select-placeholder').removeClass('select-placeholder');
+            $wrap.css({
+                display: 'block',
+                width: '100%',
+                maxWidth: '100%'
+            });
 
             var $group = $wrap.children('.input-group').first();
             if (!$group.length) {
@@ -501,8 +506,11 @@
                 $group.css({
                     display: 'flex',
                     width: '100%',
+                    maxWidth: '100%',
                     visibility: 'visible',
-                    opacity: '1'
+                    opacity: '1',
+                    float: 'none',
+                    boxSizing: 'border-box'
                 });
             }
 
@@ -511,23 +519,45 @@
                 return;
             }
 
+            // Force full-width dropdown (content-sized width was leaving empty space).
+            $select.attr('data-width', '100%');
+
             if (!$select.parent().hasClass('bootstrap-select')) {
                 $select.selectpicker({
                     showSubtext: true,
                     width: '100%'
                 });
             } else {
-                $select.selectpicker('refresh');
+                try {
+                    $select.selectpicker('destroy');
+                } catch (e) { /* ignore */ }
+                $select.selectpicker({
+                    showSubtext: true,
+                    width: '100%'
+                });
             }
 
             $wrap.removeClass('select-placeholder');
             var $bs = $select.parent('.bootstrap-select');
             if ($bs.length) {
                 $bs.css({
-                    flex: '1 1 auto',
+                    flex: '1 1 0%',
+                    width: '100%',
+                    minWidth: '0',
+                    maxWidth: 'none',
+                    float: 'none'
+                });
+                $bs.find('> .dropdown-toggle').css({
+                    width: '100%'
+                });
+            }
+
+            var $addon = $group.find('.input-group-btn').first();
+            if ($addon.length) {
+                $addon.css({
+                    flex: '0 0 auto',
                     width: 'auto',
-                    minWidth: 0,
-                    maxWidth: '100%'
+                    display: 'flex'
                 });
             }
         });
@@ -2307,6 +2337,7 @@
         }
 
         $('#siba-leads-fail-lead-id').val(leadId);
+        $('#siba-leads-fail-description').val('');
         var $select = $('#siba-leads-fail-reason');
         $select.val('');
         if ($select.hasClass('selectpicker') || $select.data('selectpicker')) {
@@ -2319,6 +2350,7 @@
     window.siba_leads_submit_mark_failed = function () {
         var leadId = parseInt($('#siba-leads-fail-lead-id').val(), 10) || 0;
         var reasonId = parseInt($('#siba-leads-fail-reason').val(), 10) || 0;
+        var description = $.trim($('#siba-leads-fail-description').val() || '');
         var labels = window.sibaLeadsFailLabels || {};
 
         if (!leadId) {
@@ -2334,7 +2366,8 @@
 
         $.post(admin_url + 'siba_leads/mark_failed', {
             lead_id: leadId,
-            failure_reason_id: reasonId
+            failure_reason_id: reasonId,
+            failure_description: description
         }).done(function (raw) {
             var response = raw;
             if (typeof raw === 'string') {

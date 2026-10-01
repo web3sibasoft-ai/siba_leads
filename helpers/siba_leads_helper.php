@@ -295,6 +295,7 @@ function siba_leads_lead_extra_columns(): array
         'siba_outcome_how'          => "varchar(50) NULL DEFAULT NULL",
         'siba_failure_reason_id'    => 'INT(11) NULL DEFAULT NULL',
         'siba_failed_from_status'   => 'INT(11) NULL DEFAULT NULL',
+        'siba_failure_description'  => 'TEXT NULL DEFAULT NULL',
     ];
 }
 
@@ -521,18 +522,24 @@ function siba_leads_set_outcome($lead_id, $outcome, $how, array $extra = []): bo
             // (re-mark / repair paths)
         }
         $payload['siba_failure_reason_id'] = $reasonId;
-        $payload['lost']                   = 1;
-        $payload['junk']                   = 0;
-        $payload['status']                 = 0;
+        $failureDesc = isset($extra['failure_description']) ? trim((string) $extra['failure_description']) : null;
+        if ($failureDesc === '') {
+            $failureDesc = null;
+        }
+        $payload['siba_failure_description'] = $failureDesc;
+        $payload['lost']                     = 1;
+        $payload['junk']                     = 0;
+        $payload['status']                   = 0;
         // So core unmark_as_lost can restore a real pipeline status.
         if ($fromStatus > 0) {
             $payload['last_lead_status'] = $fromStatus;
         }
     } else {
-        $payload['siba_failure_reason_id']  = null;
-        $payload['siba_failed_from_status'] = null;
-        $payload['lost']                    = 0;
-        $payload['junk']                    = 0;
+        $payload['siba_failure_reason_id']   = null;
+        $payload['siba_failed_from_status']  = null;
+        $payload['siba_failure_description'] = null;
+        $payload['lost']                     = 0;
+        $payload['junk']                     = 0;
     }
 
     $CI->db->where('id', $lead_id)->update($table, $payload);
@@ -556,12 +563,21 @@ function siba_leads_set_outcome($lead_id, $outcome, $how, array $extra = []): bo
                     ->row();
                 $reasonTitle = $reason->title ?? '';
             }
-            $CI->leads_model->log_lead_activity(
-                $lead_id,
-                'siba_leads_activity_marked_failed',
-                false,
-                serialize([$who, $reasonTitle !== '' ? $reasonTitle : '#', siba_leads_outcome_how_label($how)])
-            );
+            if (!empty($failureDesc)) {
+                $CI->leads_model->log_lead_activity(
+                    $lead_id,
+                    'siba_leads_activity_marked_failed_with_desc',
+                    false,
+                    serialize([$who, $reasonTitle !== '' ? $reasonTitle : '#', siba_leads_outcome_how_label($how), $failureDesc])
+                );
+            } else {
+                $CI->leads_model->log_lead_activity(
+                    $lead_id,
+                    'siba_leads_activity_marked_failed',
+                    false,
+                    serialize([$who, $reasonTitle !== '' ? $reasonTitle : '#', siba_leads_outcome_how_label($how)])
+                );
+            }
         } else {
             $CI->leads_model->log_lead_activity(
                 $lead_id,
@@ -664,6 +680,9 @@ function siba_leads_restore_from_failed($lead_id): bool
     if ($CI->db->field_exists('siba_failure_reason_id', $table)) {
         $payload['siba_failure_reason_id'] = null;
     }
+    if ($CI->db->field_exists('siba_failure_description', $table)) {
+        $payload['siba_failure_description'] = null;
+    }
     if ($CI->db->field_exists('siba_failed_from_status', $table)) {
         $payload['siba_failed_from_status'] = null;
     }
@@ -748,17 +767,20 @@ function siba_leads_outcome_banner_data($lead): ?array
         $at = (string) ($lead['date_converted'] ?? '');
     }
 
+    $failureDesc = (string) ($lead['siba_failure_description'] ?? '');
+
     return [
-        'outcome'       => $outcome,
-        'how'           => (string) ($lead['siba_outcome_how'] ?? ''),
-        'how_label'     => siba_leads_outcome_how_label($lead['siba_outcome_how'] ?? ''),
-        'at'            => $at,
-        'by'            => $byId,
-        'by_name'       => $byId > 0 ? get_staff_full_name($byId) : _l('system_default_string'),
-        'reason_id'     => $reasonId,
-        'reason_title'  => $reasonTitle,
-        'reason_color'  => $reasonColor,
-        'label'         => $outcome === 'success'
+        'outcome'             => $outcome,
+        'how'                 => (string) ($lead['siba_outcome_how'] ?? ''),
+        'how_label'           => siba_leads_outcome_how_label($lead['siba_outcome_how'] ?? ''),
+        'at'                  => $at,
+        'by'                  => $byId,
+        'by_name'             => $byId > 0 ? get_staff_full_name($byId) : _l('system_default_string'),
+        'reason_id'           => $reasonId,
+        'reason_title'        => $reasonTitle,
+        'reason_color'        => $reasonColor,
+        'failure_description' => $failureDesc,
+        'label'               => $outcome === 'success'
             ? _l('siba_leads_outcome_success')
             : _l('siba_leads_outcome_failed'),
     ];
@@ -795,7 +817,7 @@ function siba_leads_lead_modal_outcome_banner($lead = null): void
     // Ensure audit columns are present on the lead object for older rows.
     if (is_object($lead) && !isset($lead->siba_outcome) && !empty($lead->id)
         && $CI->db->field_exists('siba_outcome', db_prefix() . 'leads')) {
-        $row = $CI->db->select('siba_outcome, siba_outcome_at, siba_outcome_by, siba_outcome_how, siba_failure_reason_id')
+        $row = $CI->db->select('siba_outcome, siba_outcome_at, siba_outcome_by, siba_outcome_how, siba_failure_reason_id, siba_failure_description')
             ->from(db_prefix() . 'leads')
             ->where('id', (int) $lead->id)
             ->get()
@@ -814,3 +836,245 @@ function siba_leads_lead_modal_outcome_banner($lead = null): void
 
     $CI->load->view('siba_leads/partials/outcome_banner', ['banner' => $banner]);
 }
+
+/**
+ * Build lead → order action meta for modal/card reuse.
+ *
+ * @param object|array|int $lead
+ * @return array{href:?string,label:string,icon:string,class:string,onclick:?string}|null
+ */
+function siba_leads_lead_order_action($lead)
+{
+    if (!staff_can('creat_order', 'siba_license')) {
+        return null;
+    }
+
+    $CI = &get_instance();
+    if (is_numeric($lead)) {
+        $leadId = (int) $lead;
+        if ($leadId < 1) {
+            return null;
+        }
+        if (!class_exists('leads_model', false)) {
+            $CI->load->model('leads_model');
+        }
+        $lead = $CI->leads_model->get($leadId);
+    }
+
+    if (!$lead) {
+        return null;
+    }
+
+    $asArray = is_array($lead) ? $lead : (array) $lead;
+    $leadId  = (int) ($asArray['id'] ?? 0);
+    if ($leadId < 1) {
+        return null;
+    }
+
+    $leadIsClient = false;
+    $clientUserId = 0;
+    $clientRow = $CI->db->select('userid')
+        ->from(db_prefix() . 'clients')
+        ->where('leadid', $leadId)
+        ->limit(1)
+        ->get()
+        ->row();
+    if ($clientRow) {
+        $leadIsClient = true;
+        $clientUserId = (int) $clientRow->userid;
+    }
+
+    if ($clientUserId < 1 && !empty($asArray['related_client_userid'])) {
+        $clientUserId = (int) $asArray['related_client_userid'];
+    }
+
+    $activeOrderId = (int) ($asArray['active_order_id'] ?? 0);
+    $existingOrderId = (int) ($asArray['existing_order_id'] ?? 0);
+    $pendingFinReq = (int) ($asArray['has_pending_fin_req'] ?? 0) === 1;
+    $invoiceId = (int) ($asArray['lead_invoice_id'] ?? 0);
+    $invoiceStatus = (int) ($asArray['lead_invoice_status'] ?? 0);
+    $orderExpiredFlag = (int) ($asArray['lead_order_expired'] ?? 0) === 1;
+
+    // Modal lead object usually lacks kanban annotations — load from DB when needed.
+    if ($activeOrderId < 1 && $CI->db->table_exists(db_prefix() . 'siba_orders')) {
+        $orders = db_prefix() . 'siba_orders';
+        $active = $CI->db->select('order_id, order_invoice_id, order_factor_expired')
+            ->from($orders)
+            ->where('order_lead_id', $leadId)
+            ->where('order_financial_approval', 0)
+            ->order_by('order_id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->row_array();
+        if ($active) {
+            $activeOrderId = (int) ($active['order_id'] ?? 0);
+            if ($invoiceId < 1) {
+                $invoiceId = (int) ($active['order_invoice_id'] ?? 0);
+            }
+            if (!$orderExpiredFlag && isset($active['order_factor_expired'])) {
+                $orderExpiredFlag = (int) $active['order_factor_expired'] === 1;
+            }
+        }
+        if ($existingOrderId < 1) {
+            $CI->db->select('order_id')
+                ->from($orders)
+                ->group_start()
+                    ->where('order_lead_id', $leadId);
+            if ($clientUserId > 0) {
+                $CI->db->or_where('order_customer', $clientUserId);
+            }
+            $anyRow = $CI->db->group_end()
+                ->order_by('order_id', 'DESC')
+                ->limit(1)
+                ->get()
+                ->row_array();
+            $existingOrderId = (int) ($anyRow['order_id'] ?? 0);
+        }
+        if ($activeOrderId > 0 && $CI->db->table_exists(db_prefix() . 'siba_fin_approve_req')) {
+            $pending = $CI->db->select('1', false)
+                ->from(db_prefix() . 'siba_fin_approve_req')
+                ->where('fin_approve_order', $activeOrderId)
+                ->group_start()
+                ->where('fin_approve_answer_staff IS NULL', null, false)
+                ->or_where('fin_approve_answer_staff', 0)
+                ->group_end()
+                ->limit(1)
+                ->get()
+                ->row();
+            $pendingFinReq = !empty($pending);
+        }
+        if ($invoiceId > 0 && $invoiceStatus < 1 && $CI->db->table_exists(db_prefix() . 'invoices')) {
+            $inv = $CI->db->select('status')
+                ->from(db_prefix() . 'invoices')
+                ->where('id', $invoiceId)
+                ->limit(1)
+                ->get()
+                ->row();
+            $invoiceStatus = (int) ($inv->status ?? 0);
+        }
+    }
+
+    if ($activeOrderId > 0) {
+        $invoicePaid = $invoiceId > 0 && $invoiceStatus === 2;
+        $invoiceExpired = $invoiceId > 0 && $invoiceStatus === 5;
+        $orderExpired = $orderExpiredFlag || $invoiceExpired;
+        $needsPayment = $invoiceId > 0 && !$invoicePaid && !$invoiceExpired;
+
+        if ($orderExpired) {
+            return [
+                'href'    => null,
+                'label'   => _l('siba_leads_card_invoice_expired'),
+                'icon'    => 'fa fa-ban',
+                'class'   => 'siba-lead-modal-order-tab is-expired',
+                'onclick' => null,
+            ];
+        }
+        if ($needsPayment) {
+            return [
+                'href'    => admin_url('invoices/list_invoices/' . $invoiceId),
+                'label'   => _l('siba_leads_card_awaiting_payment'),
+                'icon'    => 'fa fa-clock',
+                'class'   => 'siba-lead-modal-order-tab is-awaiting',
+                'onclick' => null,
+            ];
+        }
+
+        $financeReady = true;
+        $financeMissingMsg = '';
+        if (!$leadIsClient && function_exists('siba_leads_lead_order_readiness')) {
+            $readiness = siba_leads_lead_order_readiness(is_object($lead) ? $lead : $asArray);
+            $financeReady = !empty($readiness['ok']);
+            if (!$financeReady) {
+                $missingText = implode('، ', $readiness['missing_labels'] ?? []);
+                $financeMissingMsg = $missingText !== ''
+                    ? _l('siba_leads_finance_incomplete', $missingText)
+                    : _l('siba_leads_finance_incomplete_short');
+            }
+        }
+
+        if (!$financeReady && !$pendingFinReq) {
+            return [
+                'href'    => '#',
+                'label'   => _l('siba_leads_card_complete_lead'),
+                'icon'    => 'fa fa-user-edit',
+                'class'   => 'siba-lead-modal-order-tab is-incomplete',
+                'onclick' => 'if (typeof siba_leads_prompt_complete_lead === \'function\') { siba_leads_prompt_complete_lead(' . $leadId . ', ' . json_encode($financeMissingMsg, JSON_UNESCAPED_UNICODE) . '); } else if (typeof init_lead === \'function\') { init_lead(' . $leadId . ', true); } return false;',
+            ];
+        }
+
+        $finLabel = $pendingFinReq
+            ? _l('siba_license_finan_approl_requested')
+            : _l('siba_license_finan_approl_req');
+
+        return [
+            'href'    => '#',
+            'label'   => $finLabel,
+            'icon'    => $pendingFinReq ? 'fa fa-hourglass-half' : 'fa fa-file-invoice-dollar',
+            'class'   => 'siba-lead-modal-order-tab ' . ($pendingFinReq ? 'is-requested' : 'is-finance'),
+            'onclick' => 'siba_leads_add_fin_approve_req(' . $activeOrderId . '); return false;',
+        ];
+    }
+
+    if ($leadIsClient && $existingOrderId > 0) {
+        $hasOrderUrl = $clientUserId > 0
+            ? admin_url('clients/client/' . $clientUserId . '?group=siba_license_reports')
+            : admin_url('siba_license/manage_orders');
+
+        return [
+            'href'    => $hasOrderUrl,
+            'label'   => _l('siba_leads_card_has_order'),
+            'icon'    => 'fa fa-check',
+            'class'   => 'siba-lead-modal-order-tab is-has-order',
+            'onclick' => null,
+        ];
+    }
+
+    $orderUrl = $clientUserId > 0
+        ? admin_url('siba_license/show_add_orders/' . $clientUserId)
+        : admin_url('siba_license/show_add_orders/' . $leadId . '/lead');
+
+    return [
+        'href'    => $orderUrl,
+        'label'   => _l('siba_leads_card_add_order'),
+        'icon'    => 'fa fa-cart-plus',
+        'class'   => 'siba-lead-modal-order-tab is-add-order',
+        'onclick' => null,
+    ];
+}
+
+/**
+ * Lead modal tab item: ثبت سفارش (same flows as kanban card button).
+ *
+ * @param object|array|null $lead
+ */
+function siba_leads_lead_modal_order_tab($lead = null): void
+{
+    if ($lead === null || $lead === '' || $lead === 0) {
+        return;
+    }
+
+    $action = siba_leads_lead_order_action($lead);
+    if ($action === null) {
+        return;
+    }
+
+    $href = $action['href'] !== null && $action['href'] !== '' ? $action['href'] : '#';
+    $onclick = !empty($action['onclick'])
+        ? ' onclick="' . htmlspecialchars($action['onclick'], ENT_QUOTES, 'UTF-8') . '"'
+        : '';
+
+    echo '<li role="presentation" class="' . e($action['class']) . '">';
+    if ($action['href'] === null) {
+        echo '<span class="siba-lead-modal-order-tab__link is-disabled" title="' . e($action['label']) . '">';
+        echo '<i class="' . e($action['icon']) . ' menu-icon"></i>';
+        echo e($action['label']);
+        echo '</span>';
+    } else {
+        echo '<a href="' . e($href) . '"' . $onclick . ' title="' . e($action['label']) . '">';
+        echo '<i class="' . e($action['icon']) . ' menu-icon"></i>';
+        echo e($action['label']);
+        echo '</a>';
+    }
+    echo '</li>';
+}
+

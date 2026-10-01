@@ -643,6 +643,29 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     gap: 4px;
 }
 
+.siba-lead-card__fail-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #fecdd3;
+    background: #fff1f2;
+    color: #be123c !important;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none !important;
+    white-space: nowrap;
+}
+
+.siba-lead-card__fail-btn:hover,
+.siba-lead-card__fail-btn:focus {
+    background: #ffe4e6;
+    color: #9f1239 !important;
+    text-decoration: none !important;
+}
+
 .siba-lead-card__details {
     margin-top: 12px;
     padding-top: 10px;
@@ -683,6 +706,42 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 .siba-lead-card__dl a {
     color: #0f766e;
     word-break: break-all;
+}
+
+.siba-lead-card__actions {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.siba-lead-card__actions > .siba-lead-card__follow-btn,
+.siba-lead-card__actions > .siba-lead-card__order-btn {
+    flex: 1 1 0;
+    margin-top: 0;
+    min-width: 0;
+}
+
+.siba-lead-card__follow-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none !important;
+}
+
+.siba-lead-card__follow-btn:hover,
+.siba-lead-card__follow-btn:focus {
+    background: #e2e8f0;
+    color: #0f172a;
+    text-decoration: none !important;
 }
 
 .siba-lead-card__order-btn {
@@ -951,6 +1010,71 @@ body.modal-open .datepicker-plot-area {
     margin-inline-start: 4px;
 }
 
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab {
+    margin-inline-start: auto;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab > a,
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab > .siba-lead-modal-order-tab__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 10px !important;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-decoration: none !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-add-order > a {
+    background: #f0fdfa;
+    color: #0f766e;
+    border: 1px solid #99f6e4 !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-add-order > a:hover {
+    background: #ccfbf1;
+    color: #115e59;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-awaiting > a {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #fdba74 !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-finance > a {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #93c5fd !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-requested > a {
+    background: #eef2ff;
+    color: #4338ca;
+    border: 1px solid #c7d2fe !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-incomplete > a {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fcd34d !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-has-order > a {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #6ee7b7 !important;
+}
+
+#lead-modal .nav-tabs-segmented > li.siba-lead-modal-order-tab.is-expired > .siba-lead-modal-order-tab__link {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    cursor: default;
+}
+
 #lead-modal .lead-wrapper > .tw-flex.tw-items-center.tw-justify-end {
     position: sticky;
     top: 0;
@@ -969,6 +1093,13 @@ body.modal-open .datepicker-plot-area {
     border-radius: 10px !important;
     font-weight: 600;
     box-shadow: none !important;
+}
+
+#lead-modal a[lead-edit].lead-top-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
 }
 
 #lead-modal .lead-information-col {
@@ -1074,6 +1205,9 @@ body.modal-open .datepicker-plot-area {
 #lead-modal .lead-edit .form-group-select-input-source {
     margin-bottom: 14px;
     position: relative;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status::after,
@@ -1114,29 +1248,35 @@ body.modal-open .datepicker-plot-area {
     width: 100% !important;
     max-width: 100% !important;
     align-items: stretch;
-    float: none;
+    float: none !important;
+    box-sizing: border-box;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .input-group > .bootstrap-select,
-#lead-modal .lead-edit .form-group-select-input-source .input-group > .bootstrap-select {
-    flex: 1 1 auto !important;
+#lead-modal .lead-edit .form-group-select-input-source .input-group > .bootstrap-select,
+#lead-modal .lead-edit .siba-inline-select-ready .input-group > .bootstrap-select {
+    flex: 1 1 0% !important;
     min-width: 0 !important;
-    width: auto !important;
-    max-width: 100% !important;
+    width: 100% !important;
+    max-width: none !important;
     float: none !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .input-group > .input-group-btn,
-#lead-modal .lead-edit .form-group-select-input-source .input-group > .input-group-btn {
+#lead-modal .lead-edit .form-group-select-input-source .input-group > .input-group-btn,
+#lead-modal .lead-edit .siba-inline-select-ready .input-group > .input-group-btn {
     flex: 0 0 auto !important;
     width: auto !important;
     display: flex !important;
 }
 
+#lead-modal .lead-edit .form-group-select-input-status .bootstrap-select > .dropdown-toggle,
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select > .dropdown-toggle,
 #lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .dropdown-toggle,
-#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select .dropdown-toggle {
-    width: 100%;
-    max-width: 100%;
+#lead-modal .lead-edit .form-group-select-input-source .bootstrap-select .dropdown-toggle,
+#lead-modal .lead-edit .siba-inline-select-ready .bootstrap-select > .dropdown-toggle {
+    width: 100% !important;
+    max-width: 100% !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .filter-option-inner-inner,
@@ -1230,27 +1370,31 @@ body.modal-open .datepicker-plot-area {
 }
 
 #lead-modal .lead-edit .input-group-select {
-    width: 100%;
-    max-width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
 }
 
 #lead-modal .lead-edit .input-group-select .input-group {
-    display: flex;
-    width: 100%;
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
     align-items: stretch;
+    box-sizing: border-box;
 }
 
 #lead-modal .lead-edit .input-group-select .input-group > .bootstrap-select {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: auto !important;
-    float: none;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    float: none !important;
 }
 
 #lead-modal .lead-edit .input-group-select .input-group > .input-group-btn {
-    flex: 0 0 auto;
-    width: auto;
-    display: flex;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    display: flex !important;
 }
 
 #lead-modal .lead-edit .input-group-select .bootstrap-select .btn,
@@ -1262,6 +1406,7 @@ body.modal-open .datepicker-plot-area {
 }
 
 #lead-modal .lead-edit .input-group-select .bootstrap-select .btn {
+    width: 100% !important;
     border-radius: 10px 0 0 10px !important;
 }
 

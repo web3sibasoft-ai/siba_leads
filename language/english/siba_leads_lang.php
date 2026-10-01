@@ -48,6 +48,7 @@ $lang['siba_leads_activity_sent_to_backlog'] = 'Moved to Backlog (no Sales team 
 $lang['siba_leads_import_desc'] = 'Import leads from CSV. Status/source fallbacks apply when a row value is missing. Sales auto-assign still runs after a real (non-simulate) import.';
 $lang['siba_leads_card_my_active_tasks'] = 'Active task: %s';
 $lang['siba_leads_card_my_active_tasks_tooltip'] = 'You have %s active task(s) on this lead';
+$lang['siba_leads_card_follow_lead'] = 'Follow lead';
 $lang['siba_leads_card_add_order'] = 'Add order';
 $lang['siba_leads_card_complete_lead'] = 'Complete lead profile';
 $lang['siba_leads_order_incomplete'] = 'Complete these lead fields before financial approval: %s';
@@ -226,6 +227,8 @@ $lang['siba_leads_mark_failed_no_reasons'] = 'No failure reasons configured. Ask
 $lang['siba_leads_mark_failed_invalid'] = 'Could not mark this lead as failed.';
 $lang['siba_leads_mark_failed_already_converted'] = 'This lead is already converted to a customer.';
 $lang['siba_leads_mark_failed_success'] = 'Lead marked as failed.';
+$lang['siba_leads_failure_description'] = 'Description of failing';
+$lang['siba_leads_failure_description_placeholder'] = 'Explain why this lead failed (optional details, customer feedback, etc.)...';
 
 $lang['siba_leads_outcome_success'] = 'Succeeded';
 $lang['siba_leads_outcome_failed'] = 'Failed';
@@ -237,4 +240,5 @@ $lang['siba_leads_outcome_how_manual_fail'] = 'Marked failed manually';
 $lang['siba_leads_outcome_how_manual_success'] = 'Marked succeeded manually';
 
 $lang['siba_leads_activity_marked_failed'] = 'Marked as failed by %s — reason: %s (%s)';
+$lang['siba_leads_activity_marked_failed_with_desc'] = 'Marked as failed by %s — reason: %s (%s) — details: %s';
 $lang['siba_leads_activity_marked_success'] = 'Marked as succeeded by %s (%s)';

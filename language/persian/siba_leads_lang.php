@@ -48,6 +48,7 @@ $lang['siba_leads_activity_sent_to_backlog'] = 'سرنخ به صف انتظار 
 $lang['siba_leads_import_desc'] = 'سرنخ‌ها را از فایل CSV وارد کنید. اگر وضعیت یا منبع در یک ردیف خالی باشد، مقدار پیش‌فرض فرم در نظر گرفته می‌شود. پس از ورود اطلاعات، تخصیص خودکار به تیم فروش نیز طبق تنظیمات انجام خواهد شد.';
 $lang['siba_leads_card_my_active_tasks'] = 'وظایف فعال من: %s';
 $lang['siba_leads_card_my_active_tasks_tooltip'] = 'شما %s وظیفه فعال برای این سرنخ دارید.';
+$lang['siba_leads_card_follow_lead'] = 'پیگیری لید';
 $lang['siba_leads_card_add_order'] = 'ثبت سفارش';
 $lang['siba_leads_card_complete_lead'] = 'تکمیل اطلاعات لید';
 $lang['siba_leads_order_incomplete'] = 'قبل از درخواست تایید مالی، این فیلدها را در پروفایل لید تکمیل کنید: %s';
@@ -217,14 +218,16 @@ $lang['siba_leads_failed_date_from'] = 'از تاریخ شکست';
 $lang['siba_leads_failed_date_to'] = 'تا تاریخ شکست';
 $lang['siba_leads_failed_search_hint'] = 'فیلدهای قابل جستجو: نام، تلفن، ایمیل، شرکت.';
 
-$lang['siba_leads_mark_failed'] = 'ثبت شکست';
+$lang['siba_leads_mark_failed'] = 'اعلام شکست';
 $lang['siba_leads_mark_failed_hint'] = 'دلیل شکست را انتخاب کنید. سرنخ از کانبان خارج می‌شود.';
-$lang['siba_leads_mark_failed_confirm'] = 'ثبت به‌عنوان شکست‌خورده';
+$lang['siba_leads_mark_failed_confirm'] = 'اعلام به‌عنوان شکست‌خورده';
 $lang['siba_leads_mark_failed_reason_required'] = 'انتخاب دلیل شکست الزامی است.';
 $lang['siba_leads_mark_failed_no_reasons'] = 'هنوز دلیلی تعریف نشده است. از ادمین بخواهید در «دلایل شکست لید» موردی اضافه کند.';
 $lang['siba_leads_mark_failed_invalid'] = 'امکان ثبت شکست برای این لید وجود ندارد.';
 $lang['siba_leads_mark_failed_already_converted'] = 'این لید قبلاً به مشتری تبدیل شده است.';
 $lang['siba_leads_mark_failed_success'] = 'لید به‌عنوان شکست‌خورده ثبت شد.';
+$lang['siba_leads_failure_description'] = 'توضیحات علت شکست';
+$lang['siba_leads_failure_description_placeholder'] = 'علت و جزئیات عدم موفقیت لید را شرح دهید (بازخورد مشتری، دلایل انصراف و...)...';
 
 $lang['siba_leads_outcome_success'] = 'موفق';
 $lang['siba_leads_outcome_failed'] = 'شکست‌خورده';
@@ -236,4 +239,5 @@ $lang['siba_leads_outcome_how_manual_fail'] = 'ثبت دستی شکست';
 $lang['siba_leads_outcome_how_manual_success'] = 'ثبت دستی موفقیت';
 
 $lang['siba_leads_activity_marked_failed'] = 'به‌عنوان شکست‌خورده توسط %s ثبت شد — دلیل: %s (%s)';
+$lang['siba_leads_activity_marked_failed_with_desc'] = 'به‌عنوان شکست‌خورده توسط %s ثبت شد — دلیل: %s (%s) — توضیحات: %s';
 $lang['siba_leads_activity_marked_success'] = 'به‌عنوان موفق توسط %s ثبت شد (%s)';

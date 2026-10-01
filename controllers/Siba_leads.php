@@ -203,8 +203,9 @@ class Siba_leads extends AdminController
             ajax_access_denied();
         }
 
-        $leadId   = (int) $this->input->post('lead_id');
-        $reasonId = (int) $this->input->post('failure_reason_id');
+        $leadId             = (int) $this->input->post('lead_id');
+        $reasonId           = (int) $this->input->post('failure_reason_id');
+        $failureDescription = trim((string) $this->input->post('failure_description'));
 
         if ($leadId < 1) {
             echo json_encode([
@@ -262,7 +263,8 @@ class Siba_leads extends AdminController
         }
 
         $ok = siba_leads_set_outcome($leadId, 'failed', 'manual_fail', [
-            'failure_reason_id' => $reasonId,
+            'failure_reason_id'   => $reasonId,
+            'failure_description' => $failureDescription,
         ]);
 
         if (!$ok) {
@@ -384,6 +386,7 @@ class Siba_leads extends AdminController
             $this->db->or_like($leadsT . '.phonenumber', $q);
             $this->db->or_like($leadsT . '.email', $q);
             $this->db->or_like($leadsT . '.company', $q);
+            $this->db->or_like($leadsT . '.siba_failure_description', $q);
             $this->db->group_end();
         }
 

@@ -241,10 +241,9 @@ $hasMyActiveTask = $myActiveTasks > 0;
                 <?php if (!$lead_is_client && (is_admin() || staff_can('edit', SIBA_LEADS_MODULE_NAME) || staff_can('edit', 'leads'))) { ?>
                 <a href="#"
                    class="siba-lead-card__fail-btn text-danger"
-                   data-toggle="tooltip"
-                   title="<?= e(_l('siba_leads_mark_failed')); ?>"
                    onclick="siba_leads_open_mark_failed(<?= (int) $lead['id']; ?>); return false;">
                     <i class="fa-solid fa-circle-xmark"></i>
+                    <span><?= e(_l('siba_leads_mark_failed')); ?></span>
                 </a>
                 <?php } ?>
                 <?php hooks()->do_action('before_leads_kanban_card_icons', $lead); ?>
@@ -260,6 +259,15 @@ $hasMyActiveTask = $myActiveTasks > 0;
             </div>
         </div>
 
+        <div class="siba-lead-card__actions">
+            <a href="<?= admin_url('leads/index/' . (int) $lead['id']); ?>"
+                class="siba-lead-card__follow-btn"
+                onclick="event.stopPropagation(); init_lead(<?= (int) $lead['id']; ?>); return false;"
+                onmousedown="event.stopPropagation();"
+                title="<?= e(_l('siba_leads_card_follow_lead')); ?>">
+                <i class="fa-regular fa-comments"></i>
+                <span><?= _l('siba_leads_card_follow_lead'); ?></span>
+            </a>
         <?php if (staff_can('creat_order', 'siba_license')) {
             $activeOrderId = (int) ($lead['active_order_id'] ?? 0);
             if ($activeOrderId > 0) {
@@ -374,6 +382,7 @@ $hasMyActiveTask = $myActiveTasks > 0;
         <?php }
             }
         } ?>
+        </div>
 
         <div id="kan-ban-expand-<?= e($lead['id']); ?>" class="siba-lead-card__details" style="display:none;">
             <dl class="siba-lead-card__dl">

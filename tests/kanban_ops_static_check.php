@@ -71,6 +71,9 @@ check('Email mailto: link', file_has($card, 'href="mailto:'));
 check('Assignee profile link', file_has($card, "admin_url('profile/'"));
 check('Notes / files counts', file_has($card, 'total_notes') && file_has($card, 'total_files'));
 
+// Card bottom actions
+check('Follow lead button', file_has($card, 'siba_leads_card_follow_lead'));
+check('Follow lead opens modal', file_has($card, 'init_lead(') && file_has($card, 'siba-lead-card__follow-btn'));
 // Order / license card actions
 check('Add order button', file_has($card, 'siba_leads_card_add_order'));
 check('Has order button', file_has($card, 'siba_leads_card_has_order'));

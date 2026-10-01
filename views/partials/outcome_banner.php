@@ -35,4 +35,10 @@ $cls = $isSuccess ? 'alert-success' : 'alert-danger';
             <strong><?= e($banner['how_label']); ?></strong>
         <?php } ?>
     </div>
+    <?php if (!$isSuccess && !empty($banner['failure_description'])) { ?>
+        <div class="tw-mt-2 tw-pt-2 tw-border-t tw-border-red-200 tw-text-sm siba-leads-failure-description">
+            <span class="tw-font-semibold"><?= e(_l('siba_leads_failure_description')); ?>:</span>
+            <div class="tw-mt-1 text-muted tw-whitespace-pre-wrap"><?= e($banner['failure_description']); ?></div>
+        </div>
+    <?php } ?>
 </div>
