@@ -1254,12 +1254,14 @@ body.modal-open .datepicker-plot-area {
 
 #lead-modal .lead-edit .form-group-select-input-status .input-group > .bootstrap-select,
 #lead-modal .lead-edit .form-group-select-input-source .input-group > .bootstrap-select,
-#lead-modal .lead-edit .siba-inline-select-ready .input-group > .bootstrap-select {
+#lead-modal .lead-edit .siba-inline-select-ready .input-group > .bootstrap-select,
+#lead-modal .lead-edit .input-group-select .input-group > .bootstrap-select {
+    display: block !important;
+    float: none !important;
     flex: 1 1 0% !important;
     min-width: 0 !important;
     width: 100% !important;
     max-width: none !important;
-    float: none !important;
 }
 
 #lead-modal .lead-edit .form-group-select-input-status .input-group > .input-group-btn,
@@ -1274,7 +1276,8 @@ body.modal-open .datepicker-plot-area {
 #lead-modal .lead-edit .form-group-select-input-source .bootstrap-select > .dropdown-toggle,
 #lead-modal .lead-edit .form-group-select-input-status .bootstrap-select .dropdown-toggle,
 #lead-modal .lead-edit .form-group-select-input-source .bootstrap-select .dropdown-toggle,
-#lead-modal .lead-edit .siba-inline-select-ready .bootstrap-select > .dropdown-toggle {
+#lead-modal .lead-edit .siba-inline-select-ready .bootstrap-select > .dropdown-toggle,
+#lead-modal .lead-edit .input-group-select .bootstrap-select > .dropdown-toggle {
     width: 100% !important;
     max-width: 100% !important;
 }
@@ -1384,6 +1387,7 @@ body.modal-open .datepicker-plot-area {
 }
 
 #lead-modal .lead-edit .input-group-select .input-group > .bootstrap-select {
+    display: block !important;
     flex: 1 1 0% !important;
     min-width: 0 !important;
     width: 100% !important;
@@ -1598,6 +1602,15 @@ body.rtl #lead-modal .lead-edit .input-group-select .input-group-btn > .btn {
 }
 .siba-report-toolbar .siba-title-info:hover {
   color: #0f766e;
+}
+.siba-report-description {
+  flex: 0 0 100%;
+  width: 100%;
+  margin: 6px 0 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #64748b;
+  line-height: 1.6;
 }
 .siba-report-toolbar .siba-tb-btn {
   border: 1px solid #e5e7eb;

@@ -486,6 +486,27 @@
         $country.closest('.form-group').addClass('siba-hide-lead-field').hide();
     }
 
+    function forceLeadModalSelectFullWidth($bs) {
+        if (!$bs || !$bs.length) {
+            return;
+        }
+        $bs.addClass('form-control');
+        var el = $bs.get(0);
+        if (!el || !el.style || !el.style.setProperty) {
+            return;
+        }
+        el.style.setProperty('display', 'block', 'important');
+        el.style.setProperty('float', 'none', 'important');
+        el.style.setProperty('flex', '1 1 0%', 'important');
+        el.style.setProperty('width', '100%', 'important');
+        el.style.setProperty('min-width', '0', 'important');
+        el.style.setProperty('max-width', 'none', 'important');
+        var btn = $bs.children('.dropdown-toggle').get(0);
+        if (btn && btn.style && btn.style.setProperty) {
+            btn.style.setProperty('width', '100%', 'important');
+        }
+    }
+
     function fixLeadModalStatusSourceFields($modal) {
         $modal.find('.form-group-select-input-status, .form-group-select-input-source').each(function () {
             var $wrap = $(this);
@@ -503,23 +524,24 @@
                 $group = $wrap.find('.input-group').first();
             }
             if ($group.length) {
-                $group.css({
-                    display: 'flex',
-                    width: '100%',
-                    maxWidth: '100%',
-                    visibility: 'visible',
-                    opacity: '1',
-                    float: 'none',
-                    boxSizing: 'border-box'
-                });
+                var groupEl = $group.get(0);
+                if (groupEl && groupEl.style && groupEl.style.setProperty) {
+                    groupEl.style.setProperty('display', 'flex', 'important');
+                    groupEl.style.setProperty('width', '100%', 'important');
+                    groupEl.style.setProperty('max-width', '100%', 'important');
+                    groupEl.style.setProperty('float', 'none', 'important');
+                    groupEl.style.setProperty('visibility', 'visible', 'important');
+                    groupEl.style.setProperty('opacity', '1', 'important');
+                    groupEl.style.setProperty('box-sizing', 'border-box', 'important');
+                }
             }
 
-            var $select = $wrap.find('select.selectpicker').first();
+            var $select = $wrap.find('select.selectpicker, select._select_input_group').first();
             if (!$select.length) {
                 return;
             }
 
-            // Force full-width dropdown (content-sized width was leaving empty space).
+            $select.addClass('form-control');
             $select.attr('data-width', '100%');
 
             if (!$select.parent().hasClass('bootstrap-select')) {
@@ -531,6 +553,8 @@
                 try {
                     $select.selectpicker('destroy');
                 } catch (e) { /* ignore */ }
+                // destroy leaves the select; re-apply classes then rebuild
+                $select.addClass('selectpicker form-control');
                 $select.selectpicker({
                     showSubtext: true,
                     width: '100%'
@@ -539,26 +563,16 @@
 
             $wrap.removeClass('select-placeholder');
             var $bs = $select.parent('.bootstrap-select');
-            if ($bs.length) {
-                $bs.css({
-                    flex: '1 1 0%',
-                    width: '100%',
-                    minWidth: '0',
-                    maxWidth: 'none',
-                    float: 'none'
-                });
-                $bs.find('> .dropdown-toggle').css({
-                    width: '100%'
-                });
-            }
+            forceLeadModalSelectFullWidth($bs);
 
-            var $addon = $group.find('.input-group-btn').first();
+            var $addon = $group.find('> .input-group-btn').first();
             if ($addon.length) {
-                $addon.css({
-                    flex: '0 0 auto',
-                    width: 'auto',
-                    display: 'flex'
-                });
+                var addonEl = $addon.get(0);
+                if (addonEl && addonEl.style && addonEl.style.setProperty) {
+                    addonEl.style.setProperty('flex', '0 0 auto', 'important');
+                    addonEl.style.setProperty('width', 'auto', 'important');
+                    addonEl.style.setProperty('display', 'flex', 'important');
+                }
             }
         });
     }
@@ -1949,16 +1963,23 @@
 
     $(document).on('shown.bs.modal', '#lead-modal', function () {
         setTimeout(enhanceLeadModal, 30);
+        setTimeout(function () {
+            fixLeadModalStatusSourceFields($('#lead-modal'));
+        }, 200);
     });
 
     $(document).on('click', '#lead-modal [lead-edit]', function () {
-        setTimeout(function () {
-            var $modal = $('#lead-modal');
-            if (!isLeadEditPanelOpen($modal)) {
-                return;
-            }
-            enhanceLeadModal();
-        }, 100);
+        var retries = [50, 150, 350];
+        retries.forEach(function (delay) {
+            setTimeout(function () {
+                var $modal = $('#lead-modal');
+                if (!isLeadEditPanelOpen($modal)) {
+                    return;
+                }
+                enhanceLeadModal();
+                fixLeadModalStatusSourceFields($modal);
+            }, delay);
+        });
     });
 
     $(document).on('hidden.bs.modal', '#lead-modal', function () {

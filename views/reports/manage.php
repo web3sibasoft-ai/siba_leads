@@ -26,7 +26,27 @@ $tabLang = [
     'analysis'    => 'siba_leads_reports_analysis',
 ];
 
+$tabDescLang = [
+    'incoming'    => 'siba_leads_reports_incoming_desc',
+    'sources'     => 'siba_leads_reports_sources_desc',
+    'failures'    => 'siba_leads_reports_failures_desc',
+    'conversion'  => 'siba_leads_reports_conversion_desc',
+    'stage_time'  => 'siba_leads_reports_stage_time_desc',
+    'pipeline'    => 'siba_leads_reports_pipeline_desc',
+    'speed'       => 'siba_leads_reports_speed_desc',
+    'staff'       => 'siba_leads_reports_staff_desc',
+    'aging'       => 'siba_leads_reports_aging_desc',
+    'response'    => 'siba_leads_reports_response_desc',
+    'sales'       => 'siba_leads_reports_sales_desc',
+    'analysis'    => 'siba_leads_reports_analysis_desc',
+];
+
 $reportTitle = _l($tabLang[$report] ?? 'siba_leads_reports');
+$descKey     = $tabDescLang[$report] ?? ('siba_leads_reports_' . $report . '_desc');
+$reportDescription = _l($descKey);
+if ($reportDescription === $descKey) {
+    $reportDescription = '';
+}
 $hideDateBucket = in_array($report, ['stage_time', 'pipeline', 'staff', 'aging'], true);
 
 $buildQuery = static function (array $override = []) use ($filters, $report) {
@@ -84,10 +104,15 @@ $axisUrl = static function ($axisKey) use ($buildQuery, $baseUrl, $report) {
                         <div class="siba-idenav-title"><?= e(_l('siba_leads_reports_menu')); ?></div>
                         <ul class="h-100 scroll-y">
                             <?php foreach ($tabs as $tabKey) {
-                                $langKey = $tabLang[$tabKey] ?? ('siba_leads_reports_' . $tabKey);
+                                $langKey     = $tabLang[$tabKey] ?? ('siba_leads_reports_' . $tabKey);
+                                $itemDescKey = $tabDescLang[$tabKey] ?? ('siba_leads_reports_' . $tabKey . '_desc');
+                                $itemDesc    = _l($itemDescKey);
+                                if ($itemDesc === $itemDescKey) {
+                                    $itemDesc = '';
+                                }
                                 ?>
                                 <li class="<?= $report === $tabKey ? 'active' : ''; ?>">
-                                    <a href="<?= e($tabUrl($tabKey)); ?>"><?= e(_l($langKey)); ?></a>
+                                    <a href="<?= e($tabUrl($tabKey)); ?>" <?= $itemDesc !== '' ? 'title="' . e($itemDesc) . '"' : ''; ?>><?= e(_l($langKey)); ?></a>
                                 </li>
                             <?php } ?>
                         </ul>
@@ -128,6 +153,12 @@ $axisUrl = static function ($axisKey) use ($buildQuery, $baseUrl, $report) {
                                     <i class="fa fa-print"></i> <?= e(_l('siba_leads_reports_print')); ?>
                                 </button>
                             </div>
+
+                            <?php if (!empty($reportDescription)) { ?>
+                                <div class="siba-report-description text-muted" style="flex: 0 0 100%; width: 100%; margin: 6px 0 8px; font-size: 13px; font-weight: 400; color: #64748b; line-height: 1.6;">
+                                    <?= e($reportDescription); ?>
+                                </div>
+                            <?php } ?>
                         </div>
 
                         <?= form_open($baseUrl, ['method' => 'get', 'id' => 'siba-leads-reports-filters', 'class' => 'siba-report-filters-bar']); ?>
