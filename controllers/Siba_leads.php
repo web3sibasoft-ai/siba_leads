@@ -46,8 +46,9 @@ class Siba_leads extends AdminController
         $data['isKanBan']      = $isKanBan;
         $data['switch_kanban'] = $isKanBan ? 0 : 1;
         $data['bodyclass']     = $isKanBan ? 'kan-ban-body siba-leads-kanban-body' : 'siba-leads-list-body';
-        $data['sort']          = get_option('default_leads_kanban_sort_type') ?: 'ASC';
-        $data['sort_by']       = get_option('default_leads_kanban_sort') ?: 'dateadded';
+        // Siba kanban: newest first by dateadded (DESC), independent of core leads settings.
+        $data['sort']          = 'DESC';
+        $data['sort_by']       = 'dateadded';
         $data['can_view_all']  = siba_leads_can_view_all();
 
         if (function_exists('siba_leads_ensure_failure_reasons_table')) {

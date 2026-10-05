@@ -8,6 +8,19 @@ use app\services\leads\LeadsKanban;
 
 class SibaLeadsKanban extends LeadsKanban
 {
+    /**
+     * Newest leads first on the Siba board (by dateadded).
+     */
+    public function defaultSortColumn()
+    {
+        return 'dateadded';
+    }
+
+    public function defaultSortDirection()
+    {
+        return 'DESC';
+    }
+
     protected function initiateQuery(): self
     {
         if (!function_exists('siba_leads_can_view_all')) {
