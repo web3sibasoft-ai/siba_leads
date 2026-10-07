@@ -27,7 +27,7 @@ function siba_leads_website_cf_column_map(): array
  */
 function siba_leads_website_native_meta_keys(): array
 {
-    return [
+    $keys = [
         'form_identifier',
         'form_source_link',
         'form_source_page_title',
@@ -47,6 +47,12 @@ function siba_leads_website_native_meta_keys(): array
         'نوع درخواست',
         'شماره بسته',
     ];
+
+    if (function_exists('siba_leads_attribution_columns')) {
+        $keys = array_merge($keys, siba_leads_attribution_columns());
+    }
+
+    return $keys;
 }
 
 /**
@@ -663,10 +669,16 @@ function siba_leads_resolve_lead_form_meta($lead): array
         'company'                  => (string) $get($lead, 'company'),
     ];
 
+    if (function_exists('siba_leads_attribution_columns')) {
+        foreach (siba_leads_attribution_columns() as $attrCol) {
+            $native[$attrCol] = (string) $get($lead, $attrCol);
+        }
+    }
+
     $descriptionMap = siba_leads_parse_description_map($description);
     $descriptionMap = siba_leads_unique_form_detail_rows($descriptionMap, $native);
 
-    return [
+    $out = [
         'form_identifier'          => $native['form_identifier'],
         'form_source_link'         => $native['form_source_link'],
         'form_source_page_title'   => $native['form_source_page_title'],
@@ -679,6 +691,14 @@ function siba_leads_resolve_lead_form_meta($lead): array
         'description_map'          => $descriptionMap,
         'meta'                     => siba_leads_get_lead_meta($leadId),
     ];
+
+    if (function_exists('siba_leads_attribution_columns')) {
+        foreach (siba_leads_attribution_columns() as $attrCol) {
+            $out[$attrCol] = $native[$attrCol] ?? '';
+        }
+    }
+
+    return $out;
 }
 
 /**

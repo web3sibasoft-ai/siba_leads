@@ -289,6 +289,19 @@ function siba_leads_lead_extra_columns(): array
         'form_title'                => "varchar(255) NULL DEFAULT ''",
         'job_id'                    => 'INT(11) NOT NULL DEFAULT 0',
         'ref_code'                  => "varchar(150) NULL DEFAULT ''",
+        // Marketing attribution (website / create-lead API)
+        'cta_location'              => "varchar(150) NULL DEFAULT ''",
+        'industry'                  => "varchar(150) NULL DEFAULT ''",
+        'traffic_source'            => "varchar(150) NULL DEFAULT ''",
+        'utm_source'                => "varchar(150) NULL DEFAULT ''",
+        'utm_medium'                => "varchar(150) NULL DEFAULT ''",
+        'utm_campaign'              => "varchar(255) NULL DEFAULT ''",
+        'utm_content'               => "varchar(255) NULL DEFAULT ''",
+        'utm_term'                  => "varchar(255) NULL DEFAULT ''",
+        'gclid'                     => "varchar(500) NULL DEFAULT ''",
+        'gbraid'                    => "varchar(500) NULL DEFAULT ''",
+        'wbraid'                    => "varchar(500) NULL DEFAULT ''",
+        'device_type'               => "varchar(50) NULL DEFAULT ''",
         'siba_outcome'              => "varchar(20) NULL DEFAULT NULL",
         'siba_outcome_at'           => 'DATETIME NULL DEFAULT NULL',
         'siba_outcome_by'           => 'INT(11) NULL DEFAULT NULL',
@@ -296,6 +309,29 @@ function siba_leads_lead_extra_columns(): array
         'siba_failure_reason_id'    => 'INT(11) NULL DEFAULT NULL',
         'siba_failed_from_status'   => 'INT(11) NULL DEFAULT NULL',
         'siba_failure_description'  => 'TEXT NULL DEFAULT NULL',
+    ];
+}
+
+/**
+ * Marketing attribution columns accepted by the create/update lead API.
+ *
+ * @return string[]
+ */
+function siba_leads_attribution_columns(): array
+{
+    return [
+        'cta_location',
+        'industry',
+        'traffic_source',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'utm_term',
+        'gclid',
+        'gbraid',
+        'wbraid',
+        'device_type',
     ];
 }
 
