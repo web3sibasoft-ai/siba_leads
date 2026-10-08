@@ -42,6 +42,8 @@ hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_profile_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_form_meta_seed');
 hooks()->add_action('after_lead_tabs_content', 'siba_leads_lead_modal_outcome_banner');
+hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_timeline_tab', 5);
+hooks()->add_action('after_lead_tabs_content', 'siba_leads_lead_modal_timeline_pane', 5);
 hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_order_tab');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
@@ -398,7 +400,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261001b') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261008a') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -490,7 +492,10 @@ function siba_leads_load_admin_js()
 
     $CI->load->view('siba_leads/partials/mark_failed_modal', ['reasons' => $failureReasons]);
 
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261001b') . '"></script>';
+    echo '<script>window.sibaLeadsTimelineLabels = ' . json_encode([
+        'loadError' => _l('siba_leads_timeline_load_error'),
+    ], JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261008a') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

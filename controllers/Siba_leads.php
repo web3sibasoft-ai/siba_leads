@@ -19,7 +19,7 @@ class Siba_leads extends AdminController
             if (!siba_leads_can_manage_teams()) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
-        } elseif (!in_array($method, ['validate_phone', 'get_cities'], true)) {
+        } elseif (!in_array($method, ['validate_phone', 'get_cities', 'timeline'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
@@ -810,5 +810,35 @@ class Siba_leads extends AdminController
         $this->output
             ->set_content_type('application/json')
             ->set_output(json_encode($cities, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * AJAX: unified lead timeline (notes + activity + tasks + task reports).
+     *
+     * @param int $lead_id
+     */
+    public function timeline($lead_id = 0)
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        $lead_id = (int) $lead_id;
+        if ($lead_id < 1) {
+            ajax_access_denied();
+        }
+
+        if (!$this->leads_model->staff_can_access_lead($lead_id)) {
+            ajax_access_denied();
+        }
+
+        $items = function_exists('siba_leads_build_lead_timeline')
+            ? siba_leads_build_lead_timeline($lead_id)
+            : [];
+
+        $this->load->view('siba_leads/partials/lead_timeline', [
+            'items'   => $items,
+            'lead_id' => $lead_id,
+        ]);
     }
 }

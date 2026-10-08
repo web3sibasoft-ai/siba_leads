@@ -9,6 +9,7 @@ require_once __DIR__ . '/siba_leads_location_helper.php';
 require_once __DIR__ . '/siba_leads_profile_helper.php';
 require_once __DIR__ . '/siba_leads_website_payload_helper.php';
 require_once __DIR__ . '/siba_leads_reports_helper.php';
+require_once __DIR__ . '/siba_leads_timeline_helper.php';
 
 /**
  * Ensure Jalali view helpers from siba_license are loaded.

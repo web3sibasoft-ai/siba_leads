@@ -2624,4 +2624,85 @@
     };
 
     window.siba_leads_init_reports_jalali_filters = window.siba_leads_init_failed_jalali_filters;
+
+    /**
+     * Unified lead modal timeline (notes + activity + tasks + task reports).
+     */
+    window.siba_leads_load_lead_timeline = function (leadId, force) {
+        leadId = parseInt(leadId, 10) || 0;
+        if (leadId < 1) {
+            return;
+        }
+
+        var $pane = $('#siba_lead_timeline');
+        if (!$pane.length) {
+            return;
+        }
+
+        var $wrap = $pane.find('.siba-lead-timeline');
+        var $loading = $wrap.find('.siba-lead-timeline__loading');
+        var $body = $wrap.find('.siba-lead-timeline__body');
+
+        if (!force && $wrap.data('loaded-lead-id') === leadId && $body.html()) {
+            return;
+        }
+
+        $loading.removeClass('hide');
+        $body.addClass('hide').empty();
+        $wrap.data('loaded-lead-id', leadId);
+
+        $.get(admin_url + 'siba_leads/timeline/' + leadId)
+            .done(function (html) {
+                $body.html(html).removeClass('hide');
+                $loading.addClass('hide');
+                if (typeof init_datepicker === 'function') {
+                    // no-op; keep for future date widgets in timeline
+                }
+                try {
+                    $body.find('[data-toggle="tooltip"]').tooltip({ container: 'body' });
+                } catch (eTip) { /* ignore */ }
+            })
+            .fail(function () {
+                $loading.addClass('hide');
+                var msg = (window.sibaLeadsTimelineLabels && window.sibaLeadsTimelineLabels.loadError)
+                    ? window.sibaLeadsTimelineLabels.loadError
+                    : 'Failed to load timeline.';
+                $body.html('<div class="alert alert-danger">' + msg + '</div>').removeClass('hide');
+            });
+    };
+
+    $(document).on('shown.bs.tab', 'a[href="#siba_lead_timeline"]', function () {
+        var leadId = parseInt($(this).attr('data-lead-id'), 10)
+            || parseInt($('#siba_lead_timeline .siba-lead-timeline').attr('data-lead-id'), 10)
+            || 0;
+        if (leadId > 0) {
+            window.siba_leads_load_lead_timeline(leadId, false);
+        }
+    });
+
+    $(document).on('click', '#siba_lead_timeline .siba-lead-timeline__filter', function (e) {
+        e.preventDefault();
+        var $btn = $(this);
+        var filter = $btn.attr('data-filter') || 'all';
+        var $root = $btn.closest('.siba-lead-timeline__body');
+
+        $btn.addClass('is-active').siblings('.siba-lead-timeline__filter').removeClass('is-active');
+
+        $root.find('.siba-lead-timeline__item').each(function () {
+            var type = $(this).attr('data-type') || '';
+            if (filter === 'all' || type === filter) {
+                $(this).removeClass('is-filtered-out');
+            } else {
+                $(this).addClass('is-filtered-out');
+            }
+        });
+    });
+
+    // Reset cache when lead modal is closed so next open reloads fresh data.
+    $(document).on('hidden.bs.modal', '#lead-modal', function () {
+        var $wrap = $('#siba_lead_timeline .siba-lead-timeline');
+        $wrap.removeData('loaded-lead-id');
+        $wrap.find('.siba-lead-timeline__body').empty().addClass('hide');
+        $wrap.find('.siba-lead-timeline__loading').removeClass('hide');
+    });
 })();
