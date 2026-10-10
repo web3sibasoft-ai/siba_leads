@@ -7,7 +7,8 @@ foreach ($statuses as $status) {
     }
 
     $kanBan = siba_leads_kanban_for_status($status['id']);
-    $kanBan->search($this->input->get('search'))
+    $searchQ = $this->input->get('search');
+    $kanBan->search($searchQ)
         ->sortBy($this->input->get('sort_by'), $this->input->get('sort'));
 
     if ($this->input->get('refresh')) {
@@ -16,7 +17,6 @@ foreach ($statuses as $status) {
 
     $leads       = $kanBan->get();
     $total_leads = count($leads);
-    $total_pages = $kanBan->totalPages();
 
     $settings = '';
     foreach (get_system_favourite_colors() as $color) {
@@ -25,6 +25,15 @@ foreach ($statuses as $status) {
     }
 
     $statusSummaryIndex = array_search($status['id'], array_column($summary, 'id'));
+    // Prefer summary totals for pagination (avoids a second heavy COUNT per column).
+    // When searching, summary is unfiltered — fall back to a lightweight countAll().
+    $limit = max(1, (int) $kanBan->limit());
+    if ($searchQ !== null && $searchQ !== '') {
+        $total_pages = $kanBan->totalPages();
+    } else {
+        $statusTotal = (int) ($summary[$statusSummaryIndex]['total'] ?? 0);
+        $total_pages = $statusTotal > 0 ? (int) ceil($statusTotal / $limit) : 0;
+    }
     $status_color       = !empty($status['color'])
         ? 'style="background:' . $status['color'] . ';border:1px solid ' . $status['color'] . '"'
         : '';

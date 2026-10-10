@@ -19,7 +19,11 @@ class Siba_leads extends AdminController
             if (!siba_leads_can_manage_teams()) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
-        } elseif (!in_array($method, ['validate_phone', 'get_cities', 'timeline'], true)) {
+        } elseif (in_array($method, ['didar', 'didar_wipe', 'didar_import', 'didar_migrate', 'didar_test'], true)) {
+            if (!is_admin()) {
+                access_denied(SIBA_LEADS_MODULE_NAME);
+            }
+        } elseif (!in_array($method, ['validate_phone', 'get_cities', 'timeline', 'kanban_card_details'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
@@ -515,6 +519,38 @@ class Siba_leads extends AdminController
         }
     }
 
+    /**
+     * Lazy-loaded expand panel HTML for a kanban card (details + website form meta).
+     *
+     * @param int $id Lead id
+     */
+    public function kanban_card_details($id = 0)
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
+            ajax_access_denied();
+        }
+
+        $id = (int) $id;
+        // Same visibility as the board: view_all or assigned to this lead.
+        if ($id < 1 || !siba_leads_can_manage_lead($id)) {
+            ajax_access_denied();
+        }
+
+        $lead = $this->leads_model->get($id);
+        if (!$lead) {
+            show_404();
+        }
+
+        $leadArr = is_object($lead) ? (array) $lead : $lead;
+        echo $this->load->view('siba_leads/_kan_ban_card_details', [
+            'lead' => $leadArr,
+        ], true);
+    }
+
     public function update_lead_status()
     {
         if ($this->input->post() && $this->input->is_ajax_request()) {
@@ -697,6 +733,276 @@ class Siba_leads extends AdminController
         $this->siba_leads_failure_reasons_model->delete($id);
         set_alert('success', _l('deleted', _l('siba_leads_failure_reason')));
         redirect(admin_url('siba_leads/failure_reasons'));
+    }
+
+    /**
+     * Didar CRM → Siba Leads migration settings and actions.
+     */
+    public function didar()
+    {
+        $ajaxAction = trim((string) $this->input->post('didar_ajax_action'));
+        if ($ajaxAction !== '' && $this->input->is_ajax_request()) {
+            $this->respond_didar_ajax($ajaxAction);
+
+            return;
+        }
+
+        if ($this->input->post('save_didar_settings')) {
+            update_option(SIBA_LEADS_DIDAR_BASE_URL_OPTION, trim((string) $this->input->post('didar_base_url')));
+            update_option(SIBA_LEADS_DIDAR_API_KEY_OPTION, trim((string) $this->input->post('didar_api_key')));
+            update_option(SIBA_LEADS_DIDAR_PIPELINE_OPTION, trim((string) $this->input->post('didar_pipeline_id')));
+            update_option(
+                SIBA_LEADS_DIDAR_SSL_VERIFY_OPTION,
+                $this->input->post('didar_ssl_verify') === '1' ? '1' : '0'
+            );
+            update_option(
+                SIBA_LEADS_DIDAR_STAFF_FIELD_SLUG_OPTION,
+                trim((string) $this->input->post('didar_staff_field_slug'))
+            );
+            update_option(
+                SIBA_LEADS_DIDAR_STAFF_MAP_OPTION,
+                trim((string) $this->input->post('didar_staff_map_json'))
+            );
+            set_alert('success', _l('settings_updated'));
+            redirect(admin_url('siba_leads/didar'));
+        }
+
+        $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
+        $pipelines = siba_leads_didar_api_key() !== ''
+            ? $this->didar_client->list_deal_pipelines()
+            : [];
+
+        $data['title']            = _l('siba_leads_didar_migration');
+        $data['didar_base_url']   = siba_leads_didar_base_url();
+        $data['didar_api_key']    = siba_leads_didar_api_key();
+        $data['didar_pipeline_id']  = trim((string) get_option(SIBA_LEADS_DIDAR_PIPELINE_OPTION));
+        $data['didar_ssl_verify']   = siba_leads_didar_ssl_verify_enabled();
+        $data['didar_staff_field_slug'] = trim((string) get_option(SIBA_LEADS_DIDAR_STAFF_FIELD_SLUG_OPTION));
+        $data['didar_staff_map_json']   = (string) get_option(SIBA_LEADS_DIDAR_STAFF_MAP_OPTION);
+        $data['pipelines']          = $pipelines;
+
+        $this->load->view('siba_leads/didar', $data);
+    }
+
+    public function didar_test()
+    {
+        $this->respond_didar_ajax('test');
+    }
+
+    public function didar_wipe()
+    {
+        $this->respond_didar_ajax('wipe');
+    }
+
+    /** @deprecated Use POST siba_leads/didar with didar_ajax_action=migrate */
+    public function didar_import()
+    {
+        $this->respond_didar_ajax('migrate');
+    }
+
+    public function didar_migrate()
+    {
+        $this->respond_didar_ajax('migrate');
+    }
+
+    /**
+     * @param string $action test|wipe|migrate
+     */
+    protected function respond_didar_ajax($action)
+    {
+        if (!$this->input->is_ajax_request() || !$this->input->post()) {
+            show_404();
+        }
+
+        $action = strtolower(trim($action));
+
+        if ($action === 'test') {
+            $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
+            $result = $this->didar_client->test_connection();
+            $this->output
+                ->set_content_type('application/json')
+                ->set_output(json_encode($result, JSON_UNESCAPED_UNICODE));
+
+            return;
+        }
+
+        if ($action === 'wipe') {
+            $confirm = trim((string) $this->input->post('confirm'));
+            if ($confirm !== 'WIPE') {
+                $this->output
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'ok'      => false,
+                        'message' => _l('siba_leads_didar_wipe_confirm_invalid'),
+                    ], JSON_UNESCAPED_UNICODE));
+
+                return;
+            }
+
+            $stats = siba_leads_didar_wipe_workspace();
+            log_activity('Siba Leads Didar wipe: ' . json_encode($stats));
+            $this->output
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'ok'      => true,
+                    'message' => _l('siba_leads_didar_wipe_done'),
+                    'stats'   => $stats,
+                ], JSON_UNESCAPED_UNICODE));
+
+            return;
+        }
+
+        if ($action === 'migrate' || $action === 'import') {
+            $this->respond_didar_migrate_batch();
+
+            return;
+        }
+
+        if ($action === 'sync_staff') {
+            $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
+            $users = $this->didar_client->list_users();
+            $stats = siba_leads_didar_sync_staff_didar_ids($users, false);
+            $built = siba_leads_didar_build_staff_map($users, false);
+            $log = [
+                siba_leads_didar_log_entry(
+                    'success',
+                    sprintf(
+                        _l('siba_leads_didar_log_staff_didar_id_sync'),
+                        (string) ($stats['updated'] ?? 0),
+                        (string) ($stats['skipped'] ?? 0),
+                        (string) ($stats['unmatched'] ?? 0)
+                    )
+                ),
+                siba_leads_didar_log_entry(
+                    'info',
+                    sprintf(_l('siba_leads_didar_log_staff_map'), (string) count($built['map'] ?? []))
+                ),
+            ];
+            foreach (($built['preview'] ?? []) as $line) {
+                $log[] = siba_leads_didar_log_entry('info', (string) $line);
+            }
+            $this->output
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'ok'      => true,
+                    'message' => _l('siba_leads_didar_sync_staff_done'),
+                    'stats'   => $stats,
+                    'mapped'  => count($built['map'] ?? []),
+                    'log'     => $log,
+                ], JSON_UNESCAPED_UNICODE));
+
+            return;
+        }
+
+        if ($action === 'sync_sources') {
+            $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
+            $didarSources = $this->didar_client->list_sources();
+            if ($didarSources === []) {
+                $this->output
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'ok'      => false,
+                        'message' => _l('siba_leads_didar_sync_sources_empty'),
+                        'log'     => [
+                            siba_leads_didar_log_entry('error', _l('siba_leads_didar_sync_sources_empty')),
+                        ],
+                    ], JSON_UNESCAPED_UNICODE));
+
+                return;
+            }
+
+            $synced = siba_leads_didar_sync_lead_sources($didarSources);
+            $stats  = $synced['stats'] ?? [];
+            $titles = $stats['titles'] ?? [];
+            $log = [
+                siba_leads_didar_log_entry(
+                    'success',
+                    sprintf(
+                        _l('siba_leads_didar_log_sources_sync'),
+                        (string) ($stats['created'] ?? 0),
+                        (string) ($stats['existing'] ?? 0),
+                        (string) ($stats['skipped'] ?? 0),
+                        (string) count($synced['map'] ?? [])
+                    )
+                ),
+            ];
+            if ($titles !== []) {
+                $log[] = siba_leads_didar_log_entry(
+                    'info',
+                    _l('siba_leads_didar_log_sources_titles') . ': ' . implode(' | ', $titles)
+                );
+            }
+
+            $this->output
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'ok'      => true,
+                    'message' => _l('siba_leads_didar_sync_sources_done'),
+                    'stats'   => $stats,
+                    'mapped'  => count($synced['map'] ?? []),
+                    'log'     => $log,
+                ], JSON_UNESCAPED_UNICODE));
+
+            return;
+        }
+
+        show_404();
+    }
+
+    protected function respond_didar_migrate_batch()
+    {
+        try {
+            // Import batches call Didar API + many DB writes; 120s is too low on local/Windows.
+            @ini_set('max_execution_time', '600');
+            @set_time_limit(600);
+            ignore_user_abort(true);
+
+            $this->load->library('siba_leads/Siba_leads_didar_importer', [], 'didar_importer');
+
+            $step   = strtolower(trim((string) $this->input->post('migrate_step')));
+            $offset = (int) $this->input->post('migrate_offset');
+            $batch  = (int) $this->input->post('migrate_batch');
+            // Page size for Didar search (skips are cheap; imports are capped inside importer).
+            if ($batch < 1) {
+                $batch = 15;
+            }
+            $batch = min(25, $batch);
+
+            if ($step === 'init' || $step === '') {
+                siba_leads_didar_import_run_clear();
+                $result = $this->didar_importer->run_prepare();
+            } else {
+                $result = $this->didar_importer->run_deals_batch($offset, $batch);
+            }
+
+            if (!empty($result['done']) && !empty($result['ok'])) {
+                log_activity('Siba Leads Didar import: ' . json_encode($result['stats'] ?? []));
+            }
+
+            $this->output_didar_json($result);
+        } catch (Throwable $e) {
+            $this->output_didar_json([
+                'ok'      => false,
+                'done'    => true,
+                'message' => $e->getMessage(),
+                'log'     => [
+                    siba_leads_didar_log_entry(
+                        'error',
+                        $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine()
+                    ),
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    protected function output_didar_json(array $payload): void
+    {
+        $this->output
+            ->set_content_type('application/json; charset=utf-8')
+            ->set_output(json_encode($payload, JSON_UNESCAPED_UNICODE));
     }
 
     /**

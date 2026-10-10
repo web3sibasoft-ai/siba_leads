@@ -35,9 +35,103 @@
                 if (typeof update_kan_ban_total_when_moving === 'function') {
                     update_kan_ban_total_when_moving(ui, data.status);
                 }
-                siba_leads_kanban();
+                // Keep the card in place — avoid full-board HTML reload on every drag.
+                if (ui.sender) {
+                    var $oldCol = $(ui.sender).closest('.kan-ban-col');
+                    var oldStatusId = $oldCol.attr('data-col-status-id');
+                    if (oldStatusId && String(oldStatusId) !== String(data.status)) {
+                        siba_leads_bump_column_header_count(oldStatusId, -1);
+                        siba_leads_bump_column_header_count(data.status, 1);
+                    }
+                    // Toggle empty placeholders without reloading the board.
+                    var $newCol = $(ui.item).closest('.kan-ban-col');
+                    siba_leads_sync_column_empty_state($oldCol);
+                    siba_leads_sync_column_empty_state($newCol);
+                }
             });
         }, 200);
+    };
+
+    window.siba_leads_sync_column_empty_state = function ($col) {
+        if (!$col || !$col.length) {
+            return;
+        }
+        var hasCards = $col.find('li.lead-kan-ban').length > 0;
+        $col.find('.kanban-empty').toggleClass('hide', hasCards);
+        $col.find('.kanban-load-more').toggleClass('hide', !hasCards);
+    };
+
+    /**
+     * Adjust the "N leads" label in a column heading after drag-drop.
+     */
+    window.siba_leads_bump_column_header_count = function (statusId, delta) {
+        var $col = $('.kan-ban-col[data-col-status-id="' + statusId + '"]');
+        if (!$col.length) {
+            return;
+        }
+        var $small = $col.find('.panel-heading small').first();
+        if (!$small.length) {
+            return;
+        }
+        var text = $small.text();
+        var match = text.match(/(\d+)/);
+        if (!match) {
+            return;
+        }
+        var next = Math.max(0, parseInt(match[1], 10) + (parseInt(delta, 10) || 0));
+        $small.text(text.replace(match[1], String(next)));
+    };
+
+    /**
+     * Lazy-load + toggle kanban card expand details.
+     */
+    window.siba_leads_expand_card = function (leadId) {
+        leadId = parseInt(leadId, 10) || 0;
+        if (!leadId) {
+            return;
+        }
+        var $panel = $('#kan-ban-expand-' + leadId);
+        if (!$panel.length) {
+            return;
+        }
+
+        var toggle = function () {
+            if (typeof slideToggle === 'function') {
+                slideToggle('#kan-ban-expand-' + leadId);
+            } else {
+                $panel.slideToggle(200);
+            }
+        };
+
+        if ($panel.attr('data-siba-details-loaded') === '1') {
+            toggle();
+            return;
+        }
+
+        if ($panel.data('siba-loading')) {
+            return;
+        }
+
+        var url = $panel.attr('data-siba-details-url')
+            || (admin_url + 'siba_leads/kanban_card_details/' + leadId);
+
+        $panel.data('siba-loading', true);
+        $panel.html('<div class="text-center tw-py-3"><i class="fa fa-spinner fa-spin"></i></div>');
+        if ($panel.is(':hidden')) {
+            toggle();
+        }
+
+        $.get(url)
+            .done(function (html) {
+                $panel.html(html);
+                $panel.attr('data-siba-details-loaded', '1');
+            })
+            .fail(function () {
+                $panel.html('<div class="text-danger tw-p-2">!</div>');
+            })
+            .always(function () {
+                $panel.data('siba-loading', false);
+            });
     };
 
     window.siba_leads_init_status_sortable = function () {

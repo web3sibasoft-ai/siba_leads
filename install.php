@@ -39,6 +39,29 @@ if (get_option('siba_leads_sales_rr_index') === false || get_option('siba_leads_
     add_option('siba_leads_sales_rr_index', '0');
 }
 
+if (get_option('siba_leads_didar_base_url') === false || get_option('siba_leads_didar_base_url') === '') {
+    add_option('siba_leads_didar_base_url', 'https://app.didar.me');
+}
+if (get_option('siba_leads_didar_api_key') === false) {
+    add_option('siba_leads_didar_api_key', '');
+}
+if (get_option('siba_leads_didar_pipeline_id') === false) {
+    add_option('siba_leads_didar_pipeline_id', '');
+}
+if (get_option('siba_leads_didar_import_source_id') === false) {
+    add_option('siba_leads_didar_import_source_id', '0');
+}
+if (get_option('siba_leads_didar_ssl_verify') === false || get_option('siba_leads_didar_ssl_verify') === '') {
+    add_option('siba_leads_didar_ssl_verify', '1');
+}
+
+// Temporary Didar user id on staff (UUID) — reinstall-safe
+if ($CI->db->table_exists(db_prefix() . 'staff')
+    && !$CI->db->field_exists('didar_id', db_prefix() . 'staff')) {
+    $CI->db->query('ALTER TABLE `' . db_prefix() . 'staff`
+        ADD COLUMN `didar_id` VARCHAR(64) NULL DEFAULT NULL AFTER `email`;');
+}
+
 if (!$CI->db->table_exists(db_prefix() . 'siba_leads_failure_reasons')) {
     $CI->db->query('CREATE TABLE `' . db_prefix() . "siba_leads_failure_reasons` (
         `id` int(11) NOT NULL AUTO_INCREMENT,

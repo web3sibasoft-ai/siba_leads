@@ -65,7 +65,8 @@ check('Backlog column marker', file_has($kanban, 'siba-backlog-col'));
 // Card drag / open
 check('Lead status update on drop', file_has($js, 'siba_leads/update_lead_status'));
 check('Open lead modal from card', file_has($card, 'init_lead('));
-check('Expand card details', file_has($card, 'slideToggle(\'#kan-ban-expand-'));
+check('Expand card details', file_has($card, 'siba_leads_expand_card(') || file_has($card, 'slideToggle(\'#kan-ban-expand-'));
+check('Lazy expand endpoint', file_has($ctrl, 'function kanban_card_details') && file_has($js, 'siba_leads_expand_card'));
 check('Phone tel: link', file_has($card, 'href="tel:'));
 check('Email mailto: link', file_has($card, 'href="mailto:'));
 check('Assignee profile link', file_has($card, "admin_url('profile/'"));

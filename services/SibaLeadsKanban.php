@@ -9,6 +9,13 @@ use app\services\leads\LeadsKanban;
 class SibaLeadsKanban extends LeadsKanban
 {
     /**
+     * Request-scoped cache for schema checks (field_exists hits information_schema).
+     *
+     * @var array<string, bool>
+     */
+    private static $fieldExistsCache = [];
+
+    /**
      * Newest leads first on the Siba board (by dateadded).
      */
     public function defaultSortColumn()
@@ -21,6 +28,55 @@ class SibaLeadsKanban extends LeadsKanban
         return 'DESC';
     }
 
+    /**
+     * Lightweight COUNT — same filters as get(), without heavy SELECT subqueries.
+     */
+    public function countAll()
+    {
+        $this->initiateCountQuery();
+
+        if ($this->q) {
+            $this->applySearchQuery($this->q);
+        }
+
+        $this->tapQueryIfNeeded();
+
+        return $this->ci->db->count_all_results();
+    }
+
+    protected function initiateCountQuery(): self
+    {
+        if (!function_exists('siba_leads_can_view_all')) {
+            $this->ci->load->helper(SIBA_LEADS_MODULE_NAME . '/siba_leads');
+        }
+
+        $prefix = db_prefix();
+        $this->ci->db->select('1', false);
+        $this->ci->db->from('leads');
+        $this->ci->db->join($prefix . 'leads_sources', $prefix . 'leads_sources.id=' . $prefix . 'leads.source', 'left');
+        $this->ci->db->join($prefix . 'staff', $prefix . 'staff.staffid=' . $prefix . 'leads.assigned', 'left');
+        $this->ci->db->where($prefix . 'leads.status', $this->status);
+
+        if (function_exists('siba_leads_kanban_open_where_sql')) {
+            $this->ci->db->where(siba_leads_kanban_open_where_sql($prefix . 'leads'), null, false);
+        } else {
+            $this->ci->db->where($prefix . 'leads.lost', 0);
+            $this->ci->db->where($prefix . 'leads.junk', 0);
+            $this->ci->db->where(
+                '(' . $prefix . 'leads.date_converted IS NULL'
+                . ' OR ' . $prefix . "leads.date_converted < '1971-01-01 00:00:00')",
+                null,
+                false
+            );
+        }
+
+        if (!siba_leads_can_view_all()) {
+            $this->ci->db->where($prefix . 'leads.assigned', (int) get_staff_user_id());
+        }
+
+        return $this;
+    }
+
     protected function initiateQuery(): self
     {
         if (!function_exists('siba_leads_can_view_all')) {
@@ -28,24 +84,66 @@ class SibaLeadsKanban extends LeadsKanban
         }
 
         $staffId = (int) get_staff_user_id();
-        // Tasks_model::STATUS_COMPLETE
-        $completeStatus = 5;
-        $prefix = db_prefix();
+        $prefix  = db_prefix();
+        $leads   = $prefix . 'leads';
 
-        $myActiveTasksSql = '(SELECT COUNT(' . $prefix . 'tasks.id)
-            FROM ' . $prefix . 'tasks
-            INNER JOIN ' . $prefix . 'task_assigned
-                ON ' . $prefix . 'task_assigned.taskid = ' . $prefix . 'tasks.id
-            WHERE ' . $prefix . 'tasks.rel_type = "lead"
-              AND ' . $prefix . 'tasks.rel_id = ' . $prefix . 'leads.id
-              AND ' . $prefix . 'task_assigned.staffid = ' . $staffId . '
-              AND ' . $prefix . 'tasks.status != ' . $completeStatus . '
-        ) as my_active_tasks';
+        $formMetaSelect = $this->buildFormMetaSelect($leads);
 
-        $orderSelect = function_exists('siba_leads_kanban_active_order_select_sql')
-            ? siba_leads_kanban_active_order_select_sql()
-            : ',0 as active_order_id,0 as has_pending_fin_req,0 as existing_order_id,0 as lead_invoice_id,0 as lead_invoice_status,\'\' as lead_invoice_hash,0 as lead_order_paid,0 as lead_order_expired,0 as lead_order_pending_invoice';
+        // Lean card SELECT: no per-row files/notes/tags/order/client correlated subqueries.
+        // Those are batch-annotated in get(). Description/website/zip/country load on expand.
+        $select = $leads . '.title, ' . $leads . '.lead_value, ' . $leads . '.address, '
+            . $leads . '.city, ' . $leads . '.state, ' . $leads . '.province_id, ' . $leads . '.city_id, '
+            . $leads . '.name as lead_name,'
+            . $prefix . 'leads_sources.name as source_name,'
+            . $leads . '.id as id,'
+            . $leads . '.assigned,'
+            . $leads . '.email,'
+            . $leads . '.phonenumber,'
+            . $leads . '.company,'
+            . $leads . '.dateadded,'
+            . $leads . '.status,'
+            . $leads . '.lastcontact'
+            . $formMetaSelect
+            . ',' . $prefix . 'staff.firstname as assigned_firstname'
+            . ',' . $prefix . 'staff.lastname as assigned_lastname'
+            . ',' . $prefix . 'staff.profile_image as assigned_profile_image'
+            . ',0 as is_lead_client,0 as client_userid,0 as total_files,0 as total_notes,\'\' as tags,0 as my_active_tasks'
+            . ',0 as active_order_id,0 as has_pending_fin_req,0 as existing_order_id'
+            . ',0 as lead_invoice_id,0 as lead_invoice_status,\'\' as lead_invoice_hash'
+            . ',0 as lead_order_paid,0 as lead_order_expired,0 as lead_order_pending_invoice';
 
+        $this->ci->db->select($select, false);
+        $this->ci->db->from('leads');
+        // LEFT JOIN: imported/legacy leads with missing source must still appear on the board.
+        $this->ci->db->join($prefix . 'leads_sources', $prefix . 'leads_sources.id=' . $leads . '.source', 'left');
+        $this->ci->db->join($prefix . 'staff', $prefix . 'staff.staffid=' . $leads . '.assigned', 'left');
+        $this->ci->db->where($leads . '.status', $this->status);
+
+        if (function_exists('siba_leads_kanban_open_where_sql')) {
+            $this->ci->db->where(siba_leads_kanban_open_where_sql($leads), null, false);
+        } else {
+            $this->ci->db->where($leads . '.lost', 0);
+            $this->ci->db->where($leads . '.junk', 0);
+            $this->ci->db->where(
+                '(' . $leads . '.date_converted IS NULL'
+                . ' OR ' . $leads . ".date_converted < '1971-01-01 00:00:00')",
+                null,
+                false
+            );
+        }
+
+        if (!siba_leads_can_view_all()) {
+            $this->ci->db->where($leads . '.assigned', $staffId);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @param string $leadsTable Fully-prefixed leads table name
+     */
+    private function buildFormMetaSelect(string $leadsTable): string
+    {
         $formMetaSelect = '';
         $formMetaColumns = [
             'form_identifier',
@@ -64,54 +162,42 @@ class SibaLeadsKanban extends LeadsKanban
             'position_id',
         ];
         foreach ($formMetaColumns as $column) {
-            if ($this->ci->db->field_exists($column, db_prefix() . 'leads')) {
-                $formMetaSelect .= ',' . db_prefix() . 'leads.' . $column;
+            if ($this->fieldExistsCached($column, $leadsTable)) {
+                $formMetaSelect .= ',' . $leadsTable . '.' . $column;
             } else {
                 $formMetaSelect .= ',\'\' as ' . $column;
             }
         }
 
-        if ($this->ci->db->field_exists('description', db_prefix() . 'leads')) {
-            $formMetaSelect .= ',' . db_prefix() . 'leads.description';
-        } else {
-            $formMetaSelect .= ',\'\' as description';
+        return $formMetaSelect;
+    }
+
+    private function fieldExistsCached(string $column, string $table): bool
+    {
+        $key = $table . '.' . $column;
+        if (!array_key_exists($key, self::$fieldExistsCache)) {
+            self::$fieldExistsCache[$key] = (bool) $this->ci->db->field_exists($column, $table);
         }
 
-        $this->ci->db->select(db_prefix() . 'leads.title, ' . db_prefix() . 'leads.website, ' . db_prefix() . 'leads.lead_value, ' . db_prefix() . 'leads.address, ' . db_prefix() . 'leads.city, ' . db_prefix() . 'leads.state, ' . db_prefix() . 'leads.province_id, ' . db_prefix() . 'leads.city_id, ' . db_prefix() . 'leads.country, ' . db_prefix() . 'leads.zip, ' . db_prefix() . 'leads.name as lead_name,' . db_prefix() . 'leads_sources.name as source_name,' . db_prefix() . 'leads.id as id,' . db_prefix() . 'leads.assigned,' . db_prefix() . 'leads.email,' . db_prefix() . 'leads.phonenumber,' . db_prefix() . 'leads.company,' . db_prefix() . 'leads.dateadded,' . db_prefix() . 'leads.status,' . db_prefix() . 'leads.lastcontact' . $formMetaSelect . ',(SELECT COUNT(*) FROM ' . db_prefix() . 'clients WHERE leadid=' . db_prefix() . 'leads.id) as is_lead_client,(SELECT userid FROM ' . db_prefix() . 'clients WHERE leadid=' . db_prefix() . 'leads.id LIMIT 1) as client_userid, (SELECT COUNT(id) FROM ' . db_prefix() . 'files WHERE rel_id=' . db_prefix() . 'leads.id AND rel_type="lead") as total_files, (SELECT COUNT(id) FROM ' . db_prefix() . 'notes WHERE rel_id=' . db_prefix() . 'leads.id AND rel_type="lead") as total_notes,(SELECT GROUP_CONCAT(name SEPARATOR ",") FROM ' . db_prefix() . 'taggables JOIN ' . db_prefix() . 'tags ON ' . db_prefix() . 'taggables.tag_id = ' . db_prefix() . 'tags.id WHERE rel_id = ' . db_prefix() . 'leads.id and rel_type="lead" ORDER by tag_order ASC) as tags,' . $myActiveTasksSql . $orderSelect);
-        $this->ci->db->from('leads');
-        // LEFT JOIN: imported/legacy leads with missing source must still appear on the board.
-        $this->ci->db->join(db_prefix() . 'leads_sources', db_prefix() . 'leads_sources.id=' . db_prefix() . 'leads.source', 'left');
-        $this->ci->db->join(db_prefix() . 'staff', db_prefix() . 'staff.staffid=' . db_prefix() . 'leads.assigned', 'left');
-        $this->ci->db->where(db_prefix() . 'leads.status', $this->status);
-        // Avoid DATETIME = '' (MySQL 8: Incorrect DATETIME value: '').
-        if (function_exists('siba_leads_kanban_open_where_sql')) {
-            $this->ci->db->where(siba_leads_kanban_open_where_sql(db_prefix() . 'leads'), null, false);
-        } else {
-            $this->ci->db->where(db_prefix() . 'leads.lost', 0);
-            $this->ci->db->where(db_prefix() . 'leads.junk', 0);
-            $this->ci->db->where(
-                '(' . db_prefix() . 'leads.date_converted IS NULL'
-                . ' OR ' . db_prefix() . "leads.date_converted < '1971-01-01 00:00:00')",
-                null,
-                false
-            );
-        }
-
-        if (!siba_leads_can_view_all()) {
-            $this->ci->db->where(db_prefix() . 'leads.assigned', (int) get_staff_user_id());
-        }
-
-        return $this;
+        return self::$fieldExistsCache[$key];
     }
 
     public function get()
     {
         $leads = parent::get();
-        if (function_exists('siba_leads_annotate_phone_duplicates')) {
-            $leads = siba_leads_annotate_phone_duplicates($leads);
+        if ($leads === []) {
+            return $leads;
         }
-        if (function_exists('siba_leads_annotate_related_customers')) {
-            $leads = siba_leads_annotate_related_customers($leads);
+
+        if (function_exists('siba_leads_kanban_batch_enrich_leads')) {
+            $leads = siba_leads_kanban_batch_enrich_leads($leads);
+        } else {
+            if (function_exists('siba_leads_annotate_phone_duplicates')) {
+                $leads = siba_leads_annotate_phone_duplicates($leads);
+            }
+            if (function_exists('siba_leads_annotate_related_customers')) {
+                $leads = siba_leads_annotate_related_customers($leads);
+            }
         }
 
         return $leads;

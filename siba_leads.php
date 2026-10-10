@@ -48,6 +48,9 @@ hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_order_tab');
 hooks()->add_action('web_to_lead_form_submitted', 'siba_leads_action_web_to_lead_submitted');
 hooks()->add_action('lead_created_from_email_integration', 'siba_leads_action_email_lead_created');
 hooks()->add_filter('not_importable_leads_fields', 'siba_leads_not_importable_leads_fields');
+hooks()->add_filter('before_create_staff_member', 'siba_leads_didar_filter_staff_didar_id');
+hooks()->add_filter('before_update_staff_member', 'siba_leads_didar_filter_staff_didar_id');
+hooks()->add_action('app_admin_footer', 'siba_leads_didar_inject_staff_didar_id_field');
 
 
 register_activation_hook(SIBA_LEADS_MODULE_NAME, 'siba_leads_module_activation_hook');
@@ -93,6 +96,23 @@ function siba_leads_load_helpers()
         add_option(SIBA_LEADS_RR_OPTION, '0');
     }
 
+    if (get_option('siba_leads_didar_base_url') === false || get_option('siba_leads_didar_base_url') === '') {
+        add_option('siba_leads_didar_base_url', 'https://app.didar.me');
+    }
+    if (get_option('siba_leads_didar_api_key') === false) {
+        add_option('siba_leads_didar_api_key', '');
+    }
+    if (get_option('siba_leads_didar_pipeline_id') === false) {
+        add_option('siba_leads_didar_pipeline_id', '');
+    }
+    if (get_option('siba_leads_didar_ssl_verify') === false || get_option('siba_leads_didar_ssl_verify') === '') {
+        add_option('siba_leads_didar_ssl_verify', '1');
+    }
+
+    if (function_exists('siba_leads_didar_ensure_staff_didar_id_column')) {
+        siba_leads_didar_ensure_staff_didar_id_column();
+    }
+
     // Create Backlog column and sync legacy unassigned leads once.
     if (function_exists('siba_leads_ensure_backlog_status')) {
         siba_leads_ensure_backlog_status();
@@ -103,6 +123,7 @@ function siba_leads_load_helpers()
         }
     }
 
+    // Schema ensure is cached via option siba_leads_columns_ready (skip on hot paths).
     if (function_exists('siba_leads_ensure_lead_columns')) {
         siba_leads_ensure_lead_columns();
     }
@@ -170,7 +191,7 @@ function siba_leads_init_menu()
         ? siba_leads_can_manage_teams()
         : (is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME));
 
-    if (!$canView && !$canReports && !$canTeams) {
+    if (!$canView && !$canReports && !$canTeams && !is_admin()) {
         return;
     }
 
@@ -220,6 +241,13 @@ function siba_leads_init_menu()
 
     if (is_admin()) {
         $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-didar',
+            'name'     => _l('siba_leads_didar_migration'),
+            'href'     => admin_url('siba_leads/didar'),
+            'position' => 102,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-failure-reasons',
             'name'     => _l('siba_leads_failure_reasons'),
             'href'     => admin_url('siba_leads/failure_reasons'),
@@ -252,7 +280,7 @@ function siba_leads_ensure_leads_menu_children($items)
         ? siba_leads_can_manage_teams()
         : (is_admin() || staff_can('manage_teams', SIBA_LEADS_MODULE_NAME));
 
-    if (!$canView && !$canReports && !$canTeams) {
+    if (!$canView && !$canReports && !$canTeams && !is_admin()) {
         return $items;
     }
 
@@ -317,6 +345,19 @@ function siba_leads_ensure_leads_menu_children($items)
                 'name'        => _l('siba_leads_teams'),
                 'href'        => admin_url('siba_leads/teams'),
                 'position'    => 100,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
+        if (is_admin() && !in_array('siba-leads-didar', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-didar',
+                'name'        => _l('siba_leads_didar_migration'),
+                'href'        => admin_url('siba_leads/didar'),
+                'position'    => 102,
                 'icon'        => '',
                 'badge'       => [],
                 'href_attrs'  => [],
@@ -400,7 +441,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261008a') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261010a') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -495,7 +536,7 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadsTimelineLabels = ' . json_encode([
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261008a') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261010a') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

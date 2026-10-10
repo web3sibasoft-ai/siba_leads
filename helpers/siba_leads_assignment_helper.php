@@ -201,6 +201,12 @@ function siba_leads_sync_unassigned_into_backlog(): void
  */
 function siba_leads_filter_before_lead_added($data)
 {
+    if (!empty($GLOBALS['siba_leads_didar_import'])) {
+        $GLOBALS['siba_leads_assignment_applied'] = true;
+
+        return is_array($data) ? $data : [];
+    }
+
     if (!is_array($data) || !siba_leads_auto_assign_enabled()) {
         return $data;
     }
@@ -244,6 +250,10 @@ function siba_leads_filter_before_email_lead($data)
  */
 function siba_leads_action_lead_created($payload)
 {
+    if (!empty($GLOBALS['siba_leads_didar_import'])) {
+        return;
+    }
+
     $leadId = is_array($payload) ? (int) ($payload['lead_id'] ?? 0) : (int) $payload;
     if ($leadId > 0 && function_exists('siba_leads_remember_created_phone')) {
         $CI = &get_instance();

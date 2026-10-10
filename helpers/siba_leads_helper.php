@@ -10,6 +10,7 @@ require_once __DIR__ . '/siba_leads_profile_helper.php';
 require_once __DIR__ . '/siba_leads_website_payload_helper.php';
 require_once __DIR__ . '/siba_leads_reports_helper.php';
 require_once __DIR__ . '/siba_leads_timeline_helper.php';
+require_once __DIR__ . '/siba_leads_didar_helper.php';
 
 /**
  * Ensure Jalali view helpers from siba_license are loaded.
@@ -194,6 +195,11 @@ function siba_leads_kanban_for_status($statusId): \modules\siba_leads\services\S
  */
 function siba_leads_get_summary(): array
 {
+    static $requestCache = null;
+    if ($requestCache !== null) {
+        return $requestCache;
+    }
+
     $CI = &get_instance();
     if (!class_exists('leads_model', false)) {
         $CI->load->model('leads_model');
@@ -250,6 +256,8 @@ function siba_leads_get_summary(): array
             $statuses[$key]['value'] = $result[$key]->value;
         }
     }
+
+    $requestCache = $statuses;
 
     return $statuses;
 }
@@ -361,15 +369,29 @@ function siba_leads_ensure_failure_reasons_table(): void
 
 function siba_leads_ensure_lead_columns(): void
 {
+    static $done = false;
+    if ($done) {
+        return;
+    }
+
+    // Skip schema probing on every admin request once columns are known-ready.
+    if (get_option('siba_leads_columns_ready') === '1') {
+        $done = true;
+
+        return;
+    }
+
     $CI = &get_instance();
     $table = db_prefix() . 'leads';
     if (!$CI->db->table_exists($table)) {
         return;
     }
 
+    $missing = false;
     foreach (siba_leads_lead_extra_columns() as $column => $definition) {
         if (!$CI->db->field_exists($column, $table)) {
             $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
+            $missing = true;
         }
     }
 
@@ -377,6 +399,7 @@ function siba_leads_ensure_lead_columns(): void
         foreach (siba_leads_location_columns() as $column => $definition) {
             if (!$CI->db->field_exists($column, $table)) {
                 $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
+                $missing = true;
             }
         }
     }
@@ -385,9 +408,19 @@ function siba_leads_ensure_lead_columns(): void
         foreach (siba_leads_profile_columns() as $column => $definition) {
             if (!$CI->db->field_exists($column, $table)) {
                 $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
+                $missing = true;
             }
         }
     }
+
+    // Mark ready so later requests skip information_schema probes.
+    if (get_option('siba_leads_columns_ready') === false) {
+        add_option('siba_leads_columns_ready', '1');
+    } else {
+        update_option('siba_leads_columns_ready', '1');
+    }
+    unset($missing);
+    $done = true;
 }
 
 /**
@@ -754,6 +787,254 @@ function siba_leads_kanban_open_where_sql(string $alias = ''): string
     // Treat NULL / zero-date legacy values as "not converted" without empty-string compare.
     return $col . 'lost = 0 AND ' . $col . 'junk = 0'
         . ' AND (' . $col . 'date_converted IS NULL OR ' . $col . "date_converted < '1971-01-01 00:00:00')";
+}
+
+/**
+ * Batch-enrich kanban lead rows (clients, counts, tags, tasks, orders, phones).
+ * Replaces per-row correlated subqueries + N+1 helpers with a few IN() queries.
+ *
+ * @param array<int, array<string, mixed>> $leads
+ * @return array<int, array<string, mixed>>
+ */
+function siba_leads_kanban_batch_enrich_leads(array $leads): array
+{
+    if ($leads === []) {
+        return $leads;
+    }
+
+    $CI     = &get_instance();
+    $prefix = db_prefix();
+    $ids    = [];
+    foreach ($leads as $lead) {
+        $id = (int) ($lead['id'] ?? 0);
+        if ($id > 0) {
+            $ids[] = $id;
+        }
+    }
+    $ids = array_values(array_unique($ids));
+    if ($ids === []) {
+        return $leads;
+    }
+
+    $idList = implode(',', $ids);
+
+    // Formal client conversion
+    $clientByLead = [];
+    if ($CI->db->table_exists($prefix . 'clients')) {
+        $rows = $CI->db->query(
+            'SELECT leadid, userid FROM ' . $prefix . 'clients WHERE leadid IN (' . $idList . ')'
+        )->result_array();
+        foreach ($rows as $row) {
+            $lid = (int) $row['leadid'];
+            if ($lid > 0 && !isset($clientByLead[$lid])) {
+                $clientByLead[$lid] = (int) $row['userid'];
+            }
+        }
+    }
+
+    // Files / notes counts
+    $filesByLead = [];
+    $notesByLead = [];
+    if ($CI->db->table_exists($prefix . 'files')) {
+        $rows = $CI->db->query(
+            'SELECT rel_id, COUNT(id) AS total FROM ' . $prefix . 'files'
+            . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ') GROUP BY rel_id'
+        )->result_array();
+        foreach ($rows as $row) {
+            $filesByLead[(int) $row['rel_id']] = (int) $row['total'];
+        }
+    }
+    if ($CI->db->table_exists($prefix . 'notes')) {
+        $rows = $CI->db->query(
+            'SELECT rel_id, COUNT(id) AS total FROM ' . $prefix . 'notes'
+            . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ') GROUP BY rel_id'
+        )->result_array();
+        foreach ($rows as $row) {
+            $notesByLead[(int) $row['rel_id']] = (int) $row['total'];
+        }
+    }
+
+    // Tags
+    $tagsByLead = [];
+    if ($CI->db->table_exists($prefix . 'taggables') && $CI->db->table_exists($prefix . 'tags')) {
+        $rows = $CI->db->query(
+            'SELECT tg.rel_id, GROUP_CONCAT(t.name ORDER BY tg.tag_order ASC SEPARATOR ",") AS tags'
+            . ' FROM ' . $prefix . 'taggables tg'
+            . ' INNER JOIN ' . $prefix . 'tags t ON t.id = tg.tag_id'
+            . ' WHERE tg.rel_type = "lead" AND tg.rel_id IN (' . $idList . ')'
+            . ' GROUP BY tg.rel_id'
+        )->result_array();
+        foreach ($rows as $row) {
+            $tagsByLead[(int) $row['rel_id']] = (string) ($row['tags'] ?? '');
+        }
+    }
+
+    // My active tasks
+    $tasksByLead = [];
+    $staffId = (int) get_staff_user_id();
+    if ($staffId > 0 && $CI->db->table_exists($prefix . 'tasks') && $CI->db->table_exists($prefix . 'task_assigned')) {
+        $rows = $CI->db->query(
+            'SELECT t.rel_id, COUNT(t.id) AS total'
+            . ' FROM ' . $prefix . 'tasks t'
+            . ' INNER JOIN ' . $prefix . 'task_assigned ta ON ta.taskid = t.id'
+            . ' WHERE t.rel_type = "lead" AND t.rel_id IN (' . $idList . ')'
+            . ' AND ta.staffid = ' . $staffId
+            . ' AND t.status != 5'
+            . ' GROUP BY t.rel_id'
+        )->result_array();
+        foreach ($rows as $row) {
+            $tasksByLead[(int) $row['rel_id']] = (int) $row['total'];
+        }
+    }
+
+    // Orders (active + any) + invoice + pending fin
+    $activeByLead   = [];
+    $anyOrderByLead = [];
+    $ordersTable    = $prefix . 'siba_orders';
+    if ($CI->db->table_exists($ordersTable)) {
+        $hasPaid     = $CI->db->field_exists('order_paid', $ordersTable);
+        $hasExpired  = $CI->db->field_exists('order_factor_expired', $ordersTable);
+        $hasPendingI = $CI->db->field_exists('order_pending_invoice', $ordersTable);
+
+        $selectExtra = '';
+        if ($hasPaid) {
+            $selectExtra .= ', order_paid';
+        }
+        if ($hasExpired) {
+            $selectExtra .= ', order_factor_expired';
+        }
+        if ($hasPendingI) {
+            $selectExtra .= ', order_pending_invoice';
+        }
+
+        $orderRows = $CI->db->query(
+            'SELECT order_id, order_lead_id, order_customer, order_invoice_id, order_financial_approval'
+            . $selectExtra
+            . ' FROM ' . $ordersTable
+            . ' WHERE order_lead_id IN (' . $idList . ')'
+            . ' OR (order_customer > 0 AND order_customer IN ('
+            . 'SELECT userid FROM ' . $prefix . 'clients WHERE leadid IN (' . $idList . ')'
+            . '))'
+            . ' ORDER BY order_id DESC'
+        )->result_array();
+
+        $clientToLead = array_flip($clientByLead); // userid => leadid
+        foreach ($orderRows as $row) {
+            $orderId   = (int) $row['order_id'];
+            $leadIdOrd = (int) ($row['order_lead_id'] ?? 0);
+            $custId    = (int) ($row['order_customer'] ?? 0);
+            $targets   = [];
+            if ($leadIdOrd > 0 && in_array($leadIdOrd, $ids, true)) {
+                $targets[] = $leadIdOrd;
+            }
+            if ($custId > 0 && isset($clientToLead[$custId])) {
+                $targets[] = (int) $clientToLead[$custId];
+            }
+            $targets = array_values(array_unique($targets));
+            foreach ($targets as $lid) {
+                if (!isset($anyOrderByLead[$lid])) {
+                    $anyOrderByLead[$lid] = $orderId;
+                }
+                if ((int) ($row['order_financial_approval'] ?? 0) === 0
+                    && $leadIdOrd === $lid
+                    && !isset($activeByLead[$lid])) {
+                    $activeByLead[$lid] = [
+                        'order_id'            => $orderId,
+                        'order_invoice_id'    => (int) ($row['order_invoice_id'] ?? 0),
+                        'order_paid'          => $hasPaid ? (int) ($row['order_paid'] ?? 0) : 0,
+                        'order_factor_expired' => $hasExpired ? (int) ($row['order_factor_expired'] ?? 0) : 0,
+                        'order_pending_invoice' => $hasPendingI ? (int) ($row['order_pending_invoice'] ?? 0) : 0,
+                    ];
+                }
+            }
+        }
+    }
+
+    $invoiceById = [];
+    $invoiceIds  = [];
+    foreach ($activeByLead as $info) {
+        $iid = (int) ($info['order_invoice_id'] ?? 0);
+        if ($iid > 0) {
+            $invoiceIds[] = $iid;
+        }
+    }
+    $invoiceIds = array_values(array_unique($invoiceIds));
+    if ($invoiceIds !== [] && $CI->db->table_exists($prefix . 'invoices')) {
+        $rows = $CI->db->query(
+            'SELECT id, status, hash FROM ' . $prefix . 'invoices WHERE id IN (' . implode(',', $invoiceIds) . ')'
+        )->result_array();
+        foreach ($rows as $row) {
+            $invoiceById[(int) $row['id']] = [
+                'status' => (int) ($row['status'] ?? 0),
+                'hash'   => (string) ($row['hash'] ?? ''),
+            ];
+        }
+    }
+
+    $pendingFinByOrder = [];
+    $activeOrderIds = [];
+    foreach ($activeByLead as $info) {
+        $oid = (int) ($info['order_id'] ?? 0);
+        if ($oid > 0) {
+            $activeOrderIds[] = $oid;
+        }
+    }
+    $activeOrderIds = array_values(array_unique($activeOrderIds));
+    $finTable = $prefix . 'siba_fin_approve_req';
+    if ($activeOrderIds !== [] && $CI->db->table_exists($finTable)) {
+        $rows = $CI->db->query(
+            'SELECT fin_approve_order FROM ' . $finTable
+            . ' WHERE fin_approve_order IN (' . implode(',', $activeOrderIds) . ')'
+            . ' AND (fin_approve_answer_staff IS NULL OR fin_approve_answer_staff = 0)'
+        )->result_array();
+        foreach ($rows as $row) {
+            $pendingFinByOrder[(int) $row['fin_approve_order']] = 1;
+        }
+    }
+
+    foreach ($leads as $idx => $lead) {
+        $id = (int) ($lead['id'] ?? 0);
+        $clientUserId = (int) ($clientByLead[$id] ?? 0);
+        $leads[$idx]['is_lead_client'] = $clientUserId > 0 ? '1' : '0';
+        $leads[$idx]['client_userid']  = $clientUserId;
+        $leads[$idx]['total_files']    = (int) ($filesByLead[$id] ?? 0);
+        $leads[$idx]['total_notes']    = (int) ($notesByLead[$id] ?? 0);
+        $leads[$idx]['tags']           = (string) ($tagsByLead[$id] ?? '');
+        $leads[$idx]['my_active_tasks'] = (int) ($tasksByLead[$id] ?? 0);
+
+        $active = $activeByLead[$id] ?? null;
+        if ($active) {
+            $invoiceId = (int) ($active['order_invoice_id'] ?? 0);
+            $inv       = $invoiceById[$invoiceId] ?? ['status' => 0, 'hash' => ''];
+            $leads[$idx]['active_order_id']            = (int) $active['order_id'];
+            $leads[$idx]['has_pending_fin_req']        = !empty($pendingFinByOrder[(int) $active['order_id']]) ? 1 : 0;
+            $leads[$idx]['lead_invoice_id']            = $invoiceId;
+            $leads[$idx]['lead_invoice_status']        = (int) $inv['status'];
+            $leads[$idx]['lead_invoice_hash']          = (string) $inv['hash'];
+            $leads[$idx]['lead_order_paid']            = (int) ($active['order_paid'] ?? 0);
+            $leads[$idx]['lead_order_expired']         = (int) ($active['order_factor_expired'] ?? 0);
+            $leads[$idx]['lead_order_pending_invoice'] = (int) ($active['order_pending_invoice'] ?? 0);
+        } else {
+            $leads[$idx]['active_order_id']            = 0;
+            $leads[$idx]['has_pending_fin_req']        = 0;
+            $leads[$idx]['lead_invoice_id']            = 0;
+            $leads[$idx]['lead_invoice_status']        = 0;
+            $leads[$idx]['lead_invoice_hash']          = '';
+            $leads[$idx]['lead_order_paid']            = 0;
+            $leads[$idx]['lead_order_expired']         = 0;
+            $leads[$idx]['lead_order_pending_invoice'] = 0;
+        }
+        $leads[$idx]['existing_order_id'] = (int) ($anyOrderByLead[$id] ?? 0);
+    }
+
+    if (function_exists('siba_leads_annotate_phone_duplicates')) {
+        $leads = siba_leads_annotate_phone_duplicates($leads);
+    }
+    if (function_exists('siba_leads_annotate_related_customers')) {
+        $leads = siba_leads_annotate_related_customers($leads);
+    }
+
+    return $leads;
 }
 
 /**

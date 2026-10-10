@@ -385,7 +385,7 @@ function siba_leads_annotate_related_customers(array $leads): array
         return $leads;
     }
 
-    $cache = [];
+    $needByNorm = [];
     foreach ($leads as $idx => $lead) {
         $leads[$idx]['related_client_userid'] = 0;
 
@@ -400,13 +400,128 @@ function siba_leads_annotate_related_customers(array $leads): array
         if ($norm === '') {
             continue;
         }
-        if (!array_key_exists($norm, $cache)) {
-            $cache[$norm] = siba_leads_find_client_id_by_phone($phone);
+        $needByNorm[$norm][] = $idx;
+    }
+
+    if ($needByNorm === []) {
+        return $leads;
+    }
+
+    $cache = siba_leads_batch_find_client_ids_by_phones(array_keys($needByNorm));
+    foreach ($needByNorm as $norm => $indexes) {
+        $clientId = (int) ($cache[$norm] ?? 0);
+        foreach ($indexes as $idx) {
+            $leads[$idx]['related_client_userid'] = $clientId;
         }
-        $leads[$idx]['related_client_userid'] = (int) $cache[$norm];
     }
 
     return $leads;
+}
+
+/**
+ * Batch map normalized phones → lowest matching client userid.
+ *
+ * @param string[] $normalizedPhones
+ * @return array<string, int>
+ */
+function siba_leads_batch_find_client_ids_by_phones(array $normalizedPhones): array
+{
+    $normalizedPhones = array_values(array_unique(array_filter(array_map('strval', $normalizedPhones))));
+    if ($normalizedPhones === []) {
+        return [];
+    }
+
+    $CI = &get_instance();
+    $clientsTable  = db_prefix() . 'clients';
+    $contactsTable = db_prefix() . 'contacts';
+    if (!$CI->db->table_exists($clientsTable)) {
+        return [];
+    }
+
+    $last10s = [];
+    $variants = [];
+    foreach ($normalizedPhones as $norm) {
+        $last10 = strlen($norm) >= 10 ? substr($norm, -10) : ltrim($norm, '0');
+        if ($last10 !== '') {
+            $last10s[$last10] = true;
+            foreach (siba_leads_phone_variants($norm) as $variant) {
+                $variants[$variant] = true;
+            }
+        }
+    }
+    $last10List = array_keys($last10s);
+    $variantList = array_keys($variants);
+    if ($variantList === [] && $last10List === []) {
+        return [];
+    }
+
+    $clientPhoneCols = ['phonenumber'];
+    foreach (['phonenumber2', 'telephone'] as $col) {
+        if ($CI->db->field_exists($col, $clientsTable)) {
+            $clientPhoneCols[] = $col;
+        }
+    }
+
+    $map = array_fill_keys($normalizedPhones, 0);
+
+    $CI->db->select('userid, ' . implode(', ', $clientPhoneCols));
+    $CI->db->from($clientsTable);
+    $CI->db->group_start();
+    foreach ($clientPhoneCols as $col) {
+        if ($variantList !== []) {
+            $CI->db->or_where_in($col, $variantList);
+        }
+        foreach ($last10List as $last10) {
+            $CI->db->or_like($col, $last10, 'before');
+        }
+    }
+    $CI->db->group_end();
+    $CI->db->order_by('userid', 'ASC');
+    $CI->db->limit(max(80, count($normalizedPhones) * 8));
+    foreach ($CI->db->get()->result_array() as $row) {
+        $userid = (int) $row['userid'];
+        foreach ($clientPhoneCols as $col) {
+            $norm = siba_leads_normalize_phone($row[$col] ?? '');
+            if ($norm !== '' && isset($map[$norm]) && $map[$norm] === 0) {
+                $map[$norm] = $userid;
+            }
+        }
+    }
+
+    if ($CI->db->table_exists($contactsTable) && $CI->db->field_exists('phonenumber', $contactsTable)) {
+        $contactPhoneCols = ['phonenumber'];
+        foreach (['contact_phonenumber2', 'contact_telephone'] as $col) {
+            if ($CI->db->field_exists($col, $contactsTable)) {
+                $contactPhoneCols[] = $col;
+            }
+        }
+
+        $CI->db->select('userid, ' . implode(', ', $contactPhoneCols));
+        $CI->db->from($contactsTable);
+        $CI->db->group_start();
+        foreach ($contactPhoneCols as $col) {
+            if ($variantList !== []) {
+                $CI->db->or_where_in($col, $variantList);
+            }
+            foreach ($last10List as $last10) {
+                $CI->db->or_like($col, $last10, 'before');
+            }
+        }
+        $CI->db->group_end();
+        $CI->db->order_by('userid', 'ASC');
+        $CI->db->limit(max(80, count($normalizedPhones) * 8));
+        foreach ($CI->db->get()->result_array() as $row) {
+            $userid = (int) $row['userid'];
+            foreach ($contactPhoneCols as $col) {
+                $norm = siba_leads_normalize_phone($row[$col] ?? '');
+                if ($norm !== '' && isset($map[$norm]) && $map[$norm] === 0) {
+                    $map[$norm] = $userid;
+                }
+            }
+        }
+    }
+
+    return $map;
 }
 
 /**
@@ -422,6 +537,7 @@ function siba_leads_annotate_phone_duplicates(array $leads): array
     }
 
     $byNorm = [];
+    $excludeIds = [];
     foreach ($leads as $idx => $lead) {
         $norm = siba_leads_normalize_phone($lead['phonenumber'] ?? '');
         $leads[$idx]['phone_duplicate'] = false;
@@ -430,6 +546,10 @@ function siba_leads_annotate_phone_duplicates(array $leads): array
             continue;
         }
         $byNorm[$norm][] = $idx;
+        $id = (int) ($lead['id'] ?? 0);
+        if ($id > 0) {
+            $excludeIds[$id] = true;
+        }
     }
 
     // Within the current page first.
@@ -449,27 +569,107 @@ function siba_leads_annotate_phone_duplicates(array $leads): array
             if ($minId && $id !== $minId) {
                 $leads[$idx]['phone_duplicate'] = true;
                 $leads[$idx]['phone_duplicate_of'] = $minId;
-            } elseif ($minId && $id === $minId) {
-                // Oldest on page may still have older siblings in DB — check below.
             }
         }
     }
 
-    // Check DB for any phone that might have siblings outside this page.
-    foreach ($leads as $idx => $lead) {
-        $phone = $lead['phonenumber'] ?? '';
-        $id = (int) ($lead['id'] ?? 0);
-        if ($phone === '' || $id < 1) {
+    if ($byNorm === []) {
+        return $leads;
+    }
+
+    // One batched DB pass for siblings outside this page.
+    $oldestOutside = siba_leads_batch_oldest_sibling_lead_ids_by_phones(array_keys($byNorm), array_keys($excludeIds));
+    foreach ($byNorm as $norm => $indexes) {
+        $outsideId = (int) ($oldestOutside[$norm] ?? 0);
+        if ($outsideId < 1) {
             continue;
         }
-        $info = siba_leads_phone_duplicate_info($phone, $id);
-        if ($info['is_duplicate']) {
-            $leads[$idx]['phone_duplicate'] = true;
-            $leads[$idx]['phone_duplicate_of'] = (int) $info['existing_id'];
+        foreach ($indexes as $idx) {
+            $id = (int) ($leads[$idx]['id'] ?? 0);
+            if ($id < 1) {
+                continue;
+            }
+            // Oldest sibling overall wins as phone_duplicate_of.
+            $currentOf = (int) ($leads[$idx]['phone_duplicate_of'] ?? 0);
+            $bestOf = $outsideId;
+            if ($currentOf > 0 && $currentOf < $bestOf) {
+                $bestOf = $currentOf;
+            }
+            if ($id !== $bestOf) {
+                $leads[$idx]['phone_duplicate'] = true;
+                $leads[$idx]['phone_duplicate_of'] = $bestOf;
+            }
         }
     }
 
     return $leads;
+}
+
+/**
+ * Batch: for each normalized phone, oldest lead id outside $excludeIds (or 0).
+ *
+ * @param string[] $normalizedPhones
+ * @param int[] $excludeIds
+ * @return array<string, int>
+ */
+function siba_leads_batch_oldest_sibling_lead_ids_by_phones(array $normalizedPhones, array $excludeIds = []): array
+{
+    $normalizedPhones = array_values(array_unique(array_filter(array_map('strval', $normalizedPhones))));
+    if ($normalizedPhones === []) {
+        return [];
+    }
+
+    $CI = &get_instance();
+    $table = db_prefix() . 'leads';
+    if (!$CI->db->table_exists($table) || !$CI->db->field_exists('phonenumber', $table)) {
+        return [];
+    }
+
+    $last10s = [];
+    $variants = [];
+    foreach ($normalizedPhones as $norm) {
+        $last10 = strlen($norm) >= 10 ? substr($norm, -10) : ltrim($norm, '0');
+        if ($last10 !== '') {
+            $last10s[$last10] = true;
+            foreach (siba_leads_phone_variants($norm) as $variant) {
+                $variants[$variant] = true;
+            }
+        }
+    }
+    $last10List = array_keys($last10s);
+    $variantList = array_keys($variants);
+    if ($variantList === [] && $last10List === []) {
+        return [];
+    }
+
+    $CI->db->select('id, phonenumber');
+    $CI->db->from($table);
+    $excludeIds = array_values(array_filter(array_map('intval', $excludeIds)));
+    if ($excludeIds !== []) {
+        $CI->db->where_not_in('id', $excludeIds);
+    }
+    $CI->db->group_start();
+    if ($variantList !== []) {
+        $CI->db->or_where_in('phonenumber', $variantList);
+    }
+    foreach ($last10List as $last10) {
+        $CI->db->or_like('phonenumber', $last10, 'before');
+    }
+    $CI->db->group_end();
+    $CI->db->order_by('id', 'ASC');
+    $CI->db->limit(max(100, count($normalizedPhones) * 10));
+    $rows = $CI->db->get()->result_array();
+
+    $map = array_fill_keys($normalizedPhones, 0);
+    foreach ($rows as $row) {
+        $norm = siba_leads_normalize_phone($row['phonenumber'] ?? '');
+        if ($norm === '' || !isset($map[$norm]) || $map[$norm] !== 0) {
+            continue;
+        }
+        $map[$norm] = (int) $row['id'];
+    }
+
+    return $map;
 }
 
 function siba_leads_duplicate_phone_message($existingId = 0): string

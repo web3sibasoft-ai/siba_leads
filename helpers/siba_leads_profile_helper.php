@@ -368,12 +368,14 @@ function siba_leads_lead_order_readiness($lead): array
         return $lead->{$key} ?? null;
     };
 
-    $location = function_exists('siba_leads_resolve_lead_location')
-        ? siba_leads_resolve_lead_location($lead)
-        : [
-            'province_id' => (int) $get('province_id'),
-            'city_id'     => (int) $get('city_id'),
-        ];
+    // Prefer already-stored IDs (kanban hot path) — avoid province/city name resolve.
+    $provinceId = (int) $get('province_id');
+    $cityId     = (int) $get('city_id');
+    if (($provinceId < 1 || $cityId < 1) && function_exists('siba_leads_resolve_lead_location')) {
+        $location   = siba_leads_resolve_lead_location($lead);
+        $provinceId = $provinceId > 0 ? $provinceId : (int) ($location['province_id'] ?? 0);
+        $cityId     = $cityId > 0 ? $cityId : (int) ($location['city_id'] ?? 0);
+    }
 
     $name = trim((string) ($get('name') ?? ''));
     if ($name === '') {
@@ -385,8 +387,8 @@ function siba_leads_lead_order_readiness($lead): array
         'company'      => trim((string) ($get('company') ?? '')),
         'phonenumber'  => trim((string) ($get('phonenumber') ?? '')),
         'address'      => trim((string) ($get('address') ?? '')),
-        'province_id'  => (int) ($location['province_id'] ?? 0),
-        'city_id'      => (int) ($location['city_id'] ?? 0),
+        'province_id'  => $provinceId,
+        'city_id'      => $cityId,
         'job_group_id' => (int) ($get('job_group_id') ?? 0),
         'position_id'  => (int) ($get('position_id') ?? 0),
         'title'        => trim((string) ($get('title') ?? '')),
