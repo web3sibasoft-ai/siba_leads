@@ -248,12 +248,25 @@ function siba_leads_didar_pipeline_map_for_status(int $statusId): ?array
         return null;
     }
 
-    $row = $CI->db->select($pipes . '.*')
-        ->from($stages)
-        ->join($pipes, $pipes . '.didar_pipeline_id = ' . $stages . '.didar_pipeline_id', 'inner')
-        ->where($stages . '.status_id', $statusId)
+    // Two-step lookup — avoid QB from()/join() double-prefix on already-prefixed names.
+    $stage = $CI->db->select('didar_pipeline_id')
+        ->where('status_id', $statusId)
+        ->order_by('id', 'ASC')
         ->limit(1)
-        ->get()
+        ->get($stages)
+        ->row_array();
+    if (!is_array($stage)) {
+        return null;
+    }
+
+    $pipelineId = trim((string) ($stage['didar_pipeline_id'] ?? ''));
+    if ($pipelineId === '') {
+        return null;
+    }
+
+    $row = $CI->db->where('didar_pipeline_id', $pipelineId)
+        ->limit(1)
+        ->get($pipes)
         ->row_array();
 
     return is_array($row) ? $row : null;
