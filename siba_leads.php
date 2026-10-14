@@ -13,7 +13,7 @@ Author: Siba
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
-define('SIBA_LEADS_MAINTENANCE_MODE', true);
+define('SIBA_LEADS_MAINTENANCE_MODE', false);
 
 hooks()->add_action('modules_loaded', 'siba_leads_load_helpers');
 hooks()->add_action('admin_init', 'siba_leads_init_menu');
