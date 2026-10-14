@@ -12,12 +12,15 @@ Author: Siba
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
+// Temporary: show maintenance page on all admin leads pages. Set to false to restore.
+define('SIBA_LEADS_MAINTENANCE_MODE', true);
 
 hooks()->add_action('modules_loaded', 'siba_leads_load_helpers');
 hooks()->add_action('admin_init', 'siba_leads_init_menu');
 hooks()->add_action('admin_init', 'siba_leads_register_permissions');
 hooks()->add_filter('staff_permissions', 'siba_leads_filter_staff_permissions');
 hooks()->add_action('admin_init', 'siba_leads_mark_csv_import_window');
+hooks()->add_action('admin_init', 'siba_leads_guard_maintenance_mode', 0);
 hooks()->add_action('admin_init', 'siba_leads_guard_duplicate_phone', 1);
 hooks()->add_action('admin_init', 'siba_leads_guard_create_permission', 1);
 hooks()->add_action('app_admin_head', 'siba_leads_load_admin_css');

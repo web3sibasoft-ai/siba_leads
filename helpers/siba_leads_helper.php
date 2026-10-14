@@ -133,6 +133,54 @@ function siba_leads_guard_create_permission()
 }
 
 /**
+ * Temporary maintenance gate for all admin leads / siba_leads pages.
+ */
+function siba_leads_is_maintenance_mode(): bool
+{
+    return defined('SIBA_LEADS_MAINTENANCE_MODE') && SIBA_LEADS_MAINTENANCE_MODE === true;
+}
+
+/**
+ * Replace leads UI with the maintenance view while SIBA_LEADS_MAINTENANCE_MODE is on.
+ * Does not affect the public/API lead create endpoints.
+ */
+function siba_leads_guard_maintenance_mode(): void
+{
+    if (!siba_leads_is_maintenance_mode()) {
+        return;
+    }
+
+    $CI = &get_instance();
+    $class = strtolower((string) $CI->router->fetch_class());
+    if (!in_array($class, ['leads', 'siba_leads'], true)) {
+        return;
+    }
+
+    $message = function_exists('_l') ? _l('siba_leads_maintenance_title') : 'Leads are under maintenance';
+
+    if ($CI->input->is_ajax_request()) {
+        $CI->output
+            ->set_status_header(503)
+            ->set_content_type('application/json', 'utf-8')
+            ->set_output(json_encode([
+                'success' => false,
+                'ok'      => false,
+                'message' => $message,
+            ], JSON_UNESCAPED_UNICODE));
+        $CI->output->_display();
+        exit;
+    }
+
+    $data = [
+        'title'     => $message,
+        'image_url' => module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/images/leads_maintenance.jpg'),
+    ];
+
+    echo $CI->load->view('siba_leads/maintenance', $data, true);
+    exit;
+}
+
+/**
  * Can the current staff open/manage the Teams settings page?
  */
 function siba_leads_can_manage_teams(): bool
