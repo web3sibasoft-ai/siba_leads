@@ -176,10 +176,36 @@ function siba_leads_assignment_from_duplicate_phone(array $current = []): ?array
 }
 
 /**
- * Fields to merge into lead insert/update payload.
- * Duplicate phones inherit the main (oldest) lead's assignee before round-robin.
+ * Non-DB helper keys that must never be passed to leads INSERT/UPDATE.
  *
- * @return array{assigned:int,status?:int,mode?:string,main_lead_id?:int}
+ * @return string[]
+ */
+function siba_leads_assignment_meta_keys(): array
+{
+    return ['mode', 'main_lead_id', 'staff_id'];
+}
+
+/**
+ * Strip assignment helper metadata from a lead payload before DB write.
+ *
+ * @param array<string,mixed> $data
+ * @return array<string,mixed>
+ */
+function siba_leads_strip_assignment_meta(array $data): array
+{
+    foreach (siba_leads_assignment_meta_keys() as $key) {
+        unset($data[$key]);
+    }
+
+    return $data;
+}
+
+/**
+ * Fields to merge into lead insert/update payload (DB columns only).
+ * Duplicate phones inherit the main (oldest) lead's assignee before round-robin.
+ * Mode / main_lead_id stay in globals — never in the returned array.
+ *
+ * @return array{assigned:int,status?:int}
  */
 function siba_leads_assignment_fields(array $current = []): array
 {
@@ -189,9 +215,8 @@ function siba_leads_assignment_fields(array $current = []): array
         if (isset($dup['status'])) {
             $fields['status'] = (int) $dup['status'];
         }
-        $fields['mode']         = 'duplicate';
-        $fields['main_lead_id'] = (int) ($dup['main_lead_id'] ?? 0);
-        $GLOBALS['siba_leads_assignment_from_duplicate'] = $fields['main_lead_id'];
+        $GLOBALS['siba_leads_assignment_from_duplicate'] = (int) ($dup['main_lead_id'] ?? 0);
+        $GLOBALS['siba_leads_assignment_mode']           = (string) ($dup['mode'] ?? 'duplicate');
 
         return $fields;
     }
@@ -204,6 +229,7 @@ function siba_leads_assignment_fields(array $current = []): array
     }
 
     unset($GLOBALS['siba_leads_assignment_from_duplicate']);
+    $GLOBALS['siba_leads_assignment_mode'] = (string) ($next['mode'] ?? 'sales');
 
     return $fields;
 }
@@ -236,9 +262,9 @@ function siba_leads_apply_assignment_to_lead(int $leadId, bool $notify = true): 
     ]);
 
     // Only persist DB columns — strip helper metadata.
-    $update = [
+    $update = siba_leads_strip_assignment_meta([
         'assigned' => (int) ($fields['assigned'] ?? 0),
-    ];
+    ]);
     if (isset($fields['status'])) {
         $update['status'] = (int) $fields['status'];
     }
@@ -249,8 +275,8 @@ function siba_leads_apply_assignment_to_lead(int $leadId, bool $notify = true): 
     $CI->db->where(db_prefix() . 'leads.id', $leadId);
     $CI->db->update(db_prefix() . 'leads', $update);
 
-    $mainLeadId = (int) ($fields['main_lead_id'] ?? ($GLOBALS['siba_leads_assignment_from_duplicate'] ?? 0));
-    unset($GLOBALS['siba_leads_assignment_from_duplicate']);
+    $mainLeadId = (int) ($GLOBALS['siba_leads_assignment_from_duplicate'] ?? 0);
+    unset($GLOBALS['siba_leads_assignment_from_duplicate'], $GLOBALS['siba_leads_assignment_mode']);
 
     if ($notify && !empty($update['assigned'])) {
         $CI->leads_model->lead_assigned_member_notification($leadId, $update['assigned'], true);
@@ -306,11 +332,15 @@ function siba_leads_filter_before_lead_added($data)
     if (!empty($GLOBALS['siba_leads_didar_import'])) {
         $GLOBALS['siba_leads_assignment_applied'] = true;
 
-        return is_array($data) ? $data : [];
+        return is_array($data) ? siba_leads_strip_assignment_meta($data) : [];
     }
 
-    if (!is_array($data) || !siba_leads_auto_assign_enabled()) {
+    if (!is_array($data)) {
         return $data;
+    }
+
+    if (!siba_leads_auto_assign_enabled()) {
+        return siba_leads_strip_assignment_meta($data);
     }
 
     // Duplicate phone → always inherit main lead's assignee (even if form set another).
@@ -322,19 +352,19 @@ function siba_leads_filter_before_lead_added($data)
         }
         $GLOBALS['siba_leads_assignment_applied']        = true;
         $GLOBALS['siba_leads_assignment_from_duplicate'] = (int) ($dup['main_lead_id'] ?? 0);
+        $GLOBALS['siba_leads_assignment_mode']           = 'duplicate';
 
-        return $data;
+        return siba_leads_strip_assignment_meta($data);
     }
 
     if ((int) ($data['assigned'] ?? 0) > 0) {
         $GLOBALS['siba_leads_assignment_applied'] = true;
 
-        return $data;
+        return siba_leads_strip_assignment_meta($data);
     }
 
     $fields = siba_leads_assignment_fields($data);
-    unset($fields['mode'], $fields['main_lead_id']);
-    $data = array_merge($data, $fields);
+    $data   = siba_leads_strip_assignment_meta(array_merge($data, $fields));
 
     $GLOBALS['siba_leads_assignment_applied'] = true;
 
@@ -351,8 +381,7 @@ function siba_leads_filter_before_email_lead($data)
     }
 
     $fields = siba_leads_assignment_fields($data);
-    unset($fields['mode'], $fields['main_lead_id']);
-    $data = array_merge($data, $fields);
+    $data   = siba_leads_strip_assignment_meta(array_merge($data, $fields));
     $GLOBALS['siba_leads_assignment_applied'] = true;
     $GLOBALS['siba_leads_from_email_filter']  = true;
 
