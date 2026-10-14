@@ -150,6 +150,11 @@ function siba_leads_guard_maintenance_mode(): void
         return;
     }
 
+    // Admins can still open leads pages while maintenance is on.
+    if (function_exists('is_admin') && is_admin()) {
+        return;
+    }
+
     $CI = &get_instance();
     $class = strtolower((string) $CI->router->fetch_class());
     if (!in_array($class, ['leads', 'siba_leads'], true)) {
