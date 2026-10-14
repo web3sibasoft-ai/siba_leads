@@ -93,6 +93,9 @@ class Import_siba_leads extends Import_leads
                     $tags = $insert['tags'] ?? '';
                     unset($insert['tags']);
                 }
+                if ($tags !== '' && function_exists('siba_leads_restrict_tags_to_existing')) {
+                    $tags = siba_leads_restrict_tags_to_existing($tags);
+                }
 
                 $this->ci->db->insert(db_prefix() . 'leads', $insert);
                 $id = $this->ci->db->insert_id();

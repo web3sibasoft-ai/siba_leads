@@ -10,21 +10,130 @@ define('SIBA_LEADS_DIDAR_SSL_VERIFY_OPTION', 'siba_leads_didar_ssl_verify');
 define('SIBA_LEADS_DIDAR_IMPORT_RUN_OPTION', 'siba_leads_didar_import_run');
 define('SIBA_LEADS_DIDAR_STAFF_MAP_OPTION', 'siba_leads_didar_staff_map_json');
 define('SIBA_LEADS_DIDAR_STAFF_FIELD_SLUG_OPTION', 'siba_leads_didar_staff_field_slug');
+define('SIBA_LEADS_DIDAR_SYNC_LOCK_OPTION', 'siba_leads_didar_sync_lock');
 
 /**
- * Didar pipeline stage titles allowed for import (only these become Perfex statuses / leads).
+ * In-scope Didar deal pipeline IDs (names fetched from API).
+ *
+ * @return string[]
+ */
+function siba_leads_didar_scoped_pipeline_ids(): array
+{
+    return [
+        '06adeb76-566c-48c1-9fae-9f0f9f64a2fe',
+        '59c1422c-ac38-408b-824c-64c4954c529d',
+        '54fcc4fd-66ea-4427-b7cd-ddcd92b9199d',
+        '0ae528c7-3073-488d-be4a-349718c9df71',
+    ];
+}
+
+/**
+ * @deprecated All Didar stages are imported per-pipeline now.
  *
  * @return string[]
  */
 function siba_leads_didar_allowed_stage_titles(): array
 {
-    return [
-        'لید خام',
-        'بی پاسخ',
-        'سوال یا آموزش',
-        'تصمیم ارسال پیش فاکتور',
-        'پیگیری واریز',
-    ];
+    return [];
+}
+
+/**
+ * Create Didar integration mapping tables (idempotent).
+ */
+function siba_leads_didar_ensure_mapping_tables(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $CI    = &get_instance();
+    $cs    = $CI->db->char_set;
+    $prefix = db_prefix();
+
+    if (!$CI->db->table_exists($prefix . 'siba_leads_didar_pipelines')) {
+        $CI->db->query('CREATE TABLE `' . $prefix . "siba_leads_didar_pipelines` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `didar_pipeline_id` varchar(64) NOT NULL,
+            `title` varchar(255) NOT NULL DEFAULT '',
+            `tag_id` int(11) NOT NULL DEFAULT 0,
+            `tag_name` varchar(191) NOT NULL DEFAULT '',
+            `dateupdated` datetime NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `didar_pipeline_id` (`didar_pipeline_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=" . $cs . ';');
+    }
+
+    if (!$CI->db->table_exists($prefix . 'siba_leads_didar_deals')) {
+        $CI->db->query('CREATE TABLE `' . $prefix . "siba_leads_didar_deals` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `didar_deal_id` varchar(64) NOT NULL,
+            `lead_id` int(11) NOT NULL DEFAULT 0,
+            `task_id` int(11) NOT NULL DEFAULT 0,
+            `pipeline_id` varchar(64) NOT NULL DEFAULT '',
+            `owner_didar_id` varchar(64) NOT NULL DEFAULT '',
+            `staff_id` int(11) NOT NULL DEFAULT 0,
+            `stage_id` varchar(64) NOT NULL DEFAULT '',
+            `sync_status` varchar(40) NOT NULL DEFAULT 'active',
+            `last_synced` datetime NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `didar_deal_id` (`didar_deal_id`),
+            KEY `lead_id` (`lead_id`),
+            KEY `pipeline_id` (`pipeline_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=" . $cs . ';');
+    }
+
+    if (!$CI->db->table_exists($prefix . 'siba_leads_didar_users')) {
+        $CI->db->query('CREATE TABLE `' . $prefix . "siba_leads_didar_users` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `didar_user_id` varchar(64) NOT NULL,
+            `staff_id` int(11) NULL DEFAULT NULL,
+            `display_name` varchar(255) NOT NULL DEFAULT '',
+            `email` varchar(191) NOT NULL DEFAULT '',
+            `code` varchar(64) NOT NULL DEFAULT '',
+            `dateupdated` datetime NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `didar_user_id` (`didar_user_id`),
+            KEY `staff_id` (`staff_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=" . $cs . ';');
+    }
+
+    if (!$CI->db->table_exists($prefix . 'siba_leads_didar_activities')) {
+        $CI->db->query('CREATE TABLE `' . $prefix . "siba_leads_didar_activities` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `didar_activity_id` varchar(64) NOT NULL,
+            `didar_deal_id` varchar(64) NOT NULL DEFAULT '',
+            `lead_id` int(11) NOT NULL DEFAULT 0,
+            `kind` varchar(20) NOT NULL DEFAULT 'history',
+            `rel_id` int(11) NOT NULL DEFAULT 0,
+            `dateupdated` datetime NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `didar_activity_id` (`didar_activity_id`),
+            KEY `didar_deal_id` (`didar_deal_id`),
+            KEY `lead_id` (`lead_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=" . $cs . ';');
+    }
+
+    if (!$CI->db->table_exists($prefix . 'siba_leads_didar_stages')) {
+        $CI->db->query('CREATE TABLE `' . $prefix . "siba_leads_didar_stages` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `didar_pipeline_id` varchar(64) NOT NULL,
+            `didar_stage_id` varchar(64) NOT NULL,
+            `title` varchar(255) NOT NULL DEFAULT '',
+            `status_id` int(11) NOT NULL DEFAULT 0,
+            `statusorder` int(11) NOT NULL DEFAULT 0,
+            `dateupdated` datetime NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `didar_stage_id` (`didar_stage_id`),
+            KEY `didar_pipeline_id` (`didar_pipeline_id`),
+            KEY `status_id` (`status_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=" . $cs . ';');
+    }
+
+    if (get_option(SIBA_LEADS_DIDAR_SYNC_LOCK_OPTION) === false) {
+        add_option(SIBA_LEADS_DIDAR_SYNC_LOCK_OPTION, '');
+    }
 }
 
 /**
@@ -44,21 +153,409 @@ function siba_leads_didar_normalize_stage_title(string $title): string
 }
 
 /**
- * Whether a Didar stage title is in the import allow-list.
+ * Whether a Didar stage title may become a Perfex column.
+ * All non-empty titles are imported (each pipeline gets its own status rows).
  */
 function siba_leads_didar_is_allowed_stage_title(string $title): bool
 {
-    $norm = siba_leads_didar_normalize_stage_title($title);
-    if ($norm === '') {
-        return false;
+    return trim($title) !== '';
+}
+
+/**
+ * @return array<int,array<string,mixed>>
+ */
+function siba_leads_didar_list_pipeline_maps(): array
+{
+    siba_leads_didar_ensure_mapping_tables();
+    $CI = &get_instance();
+    $table = db_prefix() . 'siba_leads_didar_pipelines';
+    if (!$CI->db->table_exists($table)) {
+        return [];
     }
-    foreach (siba_leads_didar_allowed_stage_titles() as $allowed) {
-        if (siba_leads_didar_normalize_stage_title($allowed) === $norm) {
-            return true;
+
+    return $CI->db->order_by('id', 'ASC')->get($table)->result_array();
+}
+
+/**
+ * @return array<string,mixed>|null
+ */
+function siba_leads_didar_get_stage_map(string $didarStageId): ?array
+{
+    $didarStageId = trim($didarStageId);
+    if ($didarStageId === '') {
+        return null;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI  = &get_instance();
+    $row = $CI->db->where('didar_stage_id', $didarStageId)
+        ->get(db_prefix() . 'siba_leads_didar_stages')
+        ->row_array();
+
+    return is_array($row) ? $row : null;
+}
+
+/**
+ * Persist Didar stage → Perfex status for a pipeline board.
+ */
+function siba_leads_didar_upsert_stage_map(
+    string $pipelineId,
+    string $stageId,
+    string $title,
+    int $statusId,
+    int $statusOrder = 0
+): void {
+    $pipelineId = trim($pipelineId);
+    $stageId    = trim($stageId);
+    if ($pipelineId === '' || $stageId === '' || $statusId < 1) {
+        return;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI      = &get_instance();
+    $table   = db_prefix() . 'siba_leads_didar_stages';
+    $payload = [
+        'didar_pipeline_id' => $pipelineId,
+        'title'             => trim($title),
+        'status_id'         => $statusId,
+        'statusorder'       => $statusOrder,
+        'dateupdated'       => date('Y-m-d H:i:s'),
+    ];
+    $row = $CI->db->where('didar_stage_id', $stageId)->get($table)->row();
+    if ($row) {
+        $CI->db->where('id', (int) $row->id)->update($table, $payload);
+    } else {
+        $payload['didar_stage_id'] = $stageId;
+        $CI->db->insert($table, $payload);
+    }
+}
+
+/**
+ * Perfex status ids that belong to one Didar pipeline board (ordered).
+ *
+ * @return int[]
+ */
+function siba_leads_didar_get_pipeline_status_ids(string $pipelineId): array
+{
+    $pipelineId = trim($pipelineId);
+    if ($pipelineId === '') {
+        return [];
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI = &get_instance();
+    $rows = $CI->db->select('status_id')
+        ->where('didar_pipeline_id', $pipelineId)
+        ->where('status_id >', 0)
+        ->order_by('statusorder', 'ASC')
+        ->order_by('id', 'ASC')
+        ->get(db_prefix() . 'siba_leads_didar_stages')
+        ->result_array();
+
+    $ids = [];
+    foreach ($rows as $row) {
+        $sid = (int) ($row['status_id'] ?? 0);
+        if ($sid > 0 && !in_array($sid, $ids, true)) {
+            $ids[] = $sid;
         }
     }
 
-    return false;
+    return $ids;
+}
+
+/**
+ * Full didar_stage_id → status_id map for import batches.
+ *
+ * @return array<string,int>
+ */
+function siba_leads_didar_load_stage_status_map(): array
+{
+    siba_leads_didar_ensure_mapping_tables();
+    $CI  = &get_instance();
+    $map = [];
+    $rows = $CI->db->select('didar_stage_id, status_id')
+        ->where('status_id >', 0)
+        ->get(db_prefix() . 'siba_leads_didar_stages')
+        ->result_array();
+    foreach ($rows as $row) {
+        $stageId = trim((string) ($row['didar_stage_id'] ?? ''));
+        $statusId = (int) ($row['status_id'] ?? 0);
+        if ($stageId !== '' && $statusId > 0) {
+            $map[$stageId] = $statusId;
+        }
+    }
+
+    return $map;
+}
+
+/**
+ * Ensure a Perfex tag exists. Returns ['id'=>int,'name'=>string] or empty id/name on failure.
+ *
+ * @return array{id:int,name:string}
+ */
+function siba_leads_didar_ensure_tag_row(string $name): array
+{
+    $name = trim(str_replace('"', "'", $name));
+    if ($name === '') {
+        return ['id' => 0, 'name' => ''];
+    }
+
+    $CI = &get_instance();
+    $table = db_prefix() . 'tags';
+    if (!$CI->db->table_exists($table)) {
+        return ['id' => 0, 'name' => ''];
+    }
+
+    $existing = $CI->db->select('id, name')->get($table)->result_array();
+    $norm = siba_leads_didar_normalize_stage_title($name);
+    foreach ($existing as $row) {
+        $rowName = trim((string) ($row['name'] ?? ''));
+        if ($rowName !== '' && siba_leads_didar_normalize_stage_title($rowName) === $norm) {
+            return ['id' => (int) $row['id'], 'name' => $rowName];
+        }
+    }
+
+    $CI->db->insert($table, ['name' => $name]);
+    $newId = (int) $CI->db->insert_id();
+    if ($newId < 1) {
+        return ['id' => 0, 'name' => ''];
+    }
+
+    hooks()->do_action('new_tag_created', $newId);
+    if (function_exists('siba_leads_clear_tags_cache')) {
+        siba_leads_clear_tags_cache();
+    }
+
+    return ['id' => $newId, 'name' => $name];
+}
+
+/**
+ * Ensure a Perfex tag exists (tbltags). Returns the stored tag name, or '' on failure.
+ */
+function siba_leads_didar_ensure_tag(string $name): string
+{
+    return siba_leads_didar_ensure_tag_row($name)['name'];
+}
+
+/**
+ * @param array{Id?:string,Title?:string} $pipeline
+ * @return array{didar_pipeline_id:string,title:string,tag_id:int,tag_name:string}|null
+ */
+function siba_leads_didar_upsert_pipeline_map(array $pipeline): ?array
+{
+    siba_leads_didar_ensure_mapping_tables();
+    $pipelineId = trim((string) ($pipeline['Id'] ?? ''));
+    $title      = trim((string) ($pipeline['Title'] ?? ''));
+    if ($pipelineId === '' || $title === '') {
+        return null;
+    }
+
+    $tag = siba_leads_didar_ensure_tag_row($title);
+    if ($tag['id'] < 1 || $tag['name'] === '') {
+        return null;
+    }
+
+    $CI    = &get_instance();
+    $table = db_prefix() . 'siba_leads_didar_pipelines';
+    $row   = $CI->db->where('didar_pipeline_id', $pipelineId)->get($table)->row_array();
+    $payload = [
+        'title'       => $title,
+        'tag_id'      => (int) $tag['id'],
+        'tag_name'    => $tag['name'],
+        'dateupdated' => date('Y-m-d H:i:s'),
+    ];
+    if ($row) {
+        $CI->db->where('id', (int) $row['id'])->update($table, $payload);
+    } else {
+        $payload['didar_pipeline_id'] = $pipelineId;
+        $CI->db->insert($table, $payload);
+    }
+
+    return [
+        'didar_pipeline_id' => $pipelineId,
+        'title'             => $title,
+        'tag_id'            => (int) $tag['id'],
+        'tag_name'          => $tag['name'],
+    ];
+}
+
+/**
+ * @return array<string,mixed>|null
+ */
+function siba_leads_didar_get_deal_map(string $dealId): ?array
+{
+    $dealId = trim($dealId);
+    if ($dealId === '') {
+        return null;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI  = &get_instance();
+    $row = $CI->db->where('didar_deal_id', $dealId)->get(db_prefix() . 'siba_leads_didar_deals')->row_array();
+
+    return is_array($row) ? $row : null;
+}
+
+/**
+ * @param array<string,mixed> $data
+ */
+function siba_leads_didar_upsert_deal_map(string $dealId, array $data): void
+{
+    $dealId = trim($dealId);
+    if ($dealId === '') {
+        return;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI    = &get_instance();
+    $table = db_prefix() . 'siba_leads_didar_deals';
+    $payload = [
+        'lead_id'        => (int) ($data['lead_id'] ?? 0),
+        'task_id'        => (int) ($data['task_id'] ?? 0),
+        'pipeline_id'    => (string) ($data['pipeline_id'] ?? ''),
+        'owner_didar_id' => (string) ($data['owner_didar_id'] ?? ''),
+        'staff_id'       => (int) ($data['staff_id'] ?? 0),
+        'stage_id'       => (string) ($data['stage_id'] ?? ''),
+        'sync_status'    => (string) ($data['sync_status'] ?? 'active'),
+        'last_synced'    => date('Y-m-d H:i:s'),
+    ];
+    $row = $CI->db->where('didar_deal_id', $dealId)->get($table)->row();
+    if ($row) {
+        $CI->db->where('id', (int) $row->id)->update($table, $payload);
+    } else {
+        $payload['didar_deal_id'] = $dealId;
+        $CI->db->insert($table, $payload);
+    }
+}
+
+/**
+ * @return array<string,mixed>|null
+ */
+function siba_leads_didar_get_activity_map(string $activityId): ?array
+{
+    $activityId = trim($activityId);
+    if ($activityId === '') {
+        return null;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI  = &get_instance();
+    $row = $CI->db->where('didar_activity_id', $activityId)->get(db_prefix() . 'siba_leads_didar_activities')->row_array();
+
+    return is_array($row) ? $row : null;
+}
+
+function siba_leads_didar_upsert_activity_map(
+    string $activityId,
+    string $dealId,
+    int $leadId,
+    string $kind,
+    int $relId
+): void {
+    $activityId = trim($activityId);
+    if ($activityId === '') {
+        return;
+    }
+    siba_leads_didar_ensure_mapping_tables();
+    $CI    = &get_instance();
+    $table = db_prefix() . 'siba_leads_didar_activities';
+    $payload = [
+        'didar_deal_id' => trim($dealId),
+        'lead_id'       => $leadId,
+        'kind'          => $kind === 'reminder' ? 'reminder' : 'history',
+        'rel_id'        => $relId,
+        'dateupdated'   => date('Y-m-d H:i:s'),
+    ];
+    $row = $CI->db->where('didar_activity_id', $activityId)->get($table)->row();
+    if ($row) {
+        $CI->db->where('id', (int) $row->id)->update($table, $payload);
+    } else {
+        $payload['didar_activity_id'] = $activityId;
+        $CI->db->insert($table, $payload);
+    }
+}
+
+/**
+ * @param array<string,mixed> $user
+ */
+function siba_leads_didar_upsert_user_map(array $user, int $staffId = 0): void
+{
+    siba_leads_didar_ensure_mapping_tables();
+    $userId = trim((string) ($user['UserId'] ?? $user['Id'] ?? ''));
+    if ($userId === '') {
+        return;
+    }
+    $CI    = &get_instance();
+    $table = db_prefix() . 'siba_leads_didar_users';
+    $payload = [
+        'staff_id'     => $staffId > 0 ? $staffId : null,
+        'display_name' => trim((string) ($user['DisplayName'] ?? $user['Name'] ?? '')),
+        'email'        => trim((string) ($user['Email'] ?? '')),
+        'code'         => trim((string) ($user['Code'] ?? '')),
+        'dateupdated'  => date('Y-m-d H:i:s'),
+    ];
+    $row = $CI->db->where('didar_user_id', $userId)->get($table)->row();
+    if ($row) {
+        // Keep an existing manual staff_id if new resolution is empty.
+        if (($payload['staff_id'] === null || $payload['staff_id'] < 1) && !empty($row->staff_id)) {
+            unset($payload['staff_id']);
+        }
+        $CI->db->where('id', (int) $row->id)->update($table, $payload);
+    } else {
+        $payload['didar_user_id'] = $userId;
+        $CI->db->insert($table, $payload);
+    }
+}
+
+function siba_leads_didar_is_deal_pending(array $deal): bool
+{
+    return strcasecmp(trim((string) ($deal['Status'] ?? '')), 'Pending') === 0;
+}
+
+/**
+ * Didar often populates DoneDate even on open activities; trust IsDone only.
+ */
+function siba_leads_didar_activity_is_done(array $activity): bool
+{
+    $isDone = $activity['IsDone'] ?? false;
+    if (is_string($isDone)) {
+        $normalized = strtolower(trim($isDone));
+
+        return in_array($normalized, ['1', 'true', 'yes'], true);
+    }
+
+    return (bool) $isDone;
+}
+
+/**
+ * Open (not done) Didar activities with a real DueDate → Perfex task reminders.
+ * Includes overdue open activities; completed activities become task reports instead.
+ */
+function siba_leads_didar_activity_is_future_reminder(array $activity): bool
+{
+    if (siba_leads_didar_activity_is_done($activity)) {
+        return false;
+    }
+    if (!empty($activity['IsDeleted'])) {
+        return false;
+    }
+
+    return siba_leads_didar_parse_utc_datetime($activity['DueDate'] ?? '') !== null;
+}
+
+/**
+ * Resolve Didar deal PipelineId from common response shapes.
+ *
+ * @param array<string,mixed> $deal
+ */
+function siba_leads_didar_deal_pipeline_id(array $deal): string
+{
+    $id = trim((string) ($deal['PipelineId'] ?? ''));
+    if ($id !== '') {
+        return $id;
+    }
+    if (!empty($deal['Pipeline']['Id'])) {
+        return trim((string) $deal['Pipeline']['Id']);
+    }
+    if (!empty($deal['DealPipeline']['Id'])) {
+        return trim((string) $deal['DealPipeline']['Id']);
+    }
+
+    return '';
 }
 
 /**
@@ -607,14 +1104,16 @@ function siba_leads_didar_api_key(): string
 }
 
 /**
+ * Parse a Didar UTC datetime; returns null when empty/placeholder/invalid.
+ *
  * @param mixed $value
- * @return string
+ * @return string|null MySQL datetime in app timezone, or null
  */
-function siba_leads_didar_utc_to_mysql($value): string
+function siba_leads_didar_parse_utc_datetime($value): ?string
 {
     $value = trim((string) $value);
     if ($value === '' || strpos($value, '0001-01-01') === 0 || strpos($value, '1930-01-01') === 0) {
-        return date('Y-m-d H:i:s');
+        return null;
     }
 
     try {
@@ -623,8 +1122,19 @@ function siba_leads_didar_utc_to_mysql($value): string
 
         return $dt->format('Y-m-d H:i:s');
     } catch (Exception $e) {
-        return date('Y-m-d H:i:s');
+        return null;
     }
+}
+
+/**
+ * @param mixed $value
+ * @return string
+ */
+function siba_leads_didar_utc_to_mysql($value): string
+{
+    $parsed = siba_leads_didar_parse_utc_datetime($value);
+
+    return $parsed !== null ? $parsed : date('Y-m-d H:i:s');
 }
 
 /**
@@ -672,6 +1182,11 @@ function siba_leads_didar_find_lead_by_deal_id(string $dealId): int
     $dealId = trim($dealId);
     if ($dealId === '') {
         return 0;
+    }
+
+    $map = siba_leads_didar_get_deal_map($dealId);
+    if ($map && (int) ($map['lead_id'] ?? 0) > 0) {
+        return (int) $map['lead_id'];
     }
 
     $CI = &get_instance();
@@ -772,6 +1287,17 @@ function siba_leads_didar_wipe_workspace(): array
 
     if ($CI->db->table_exists(db_prefix() . 'siba_leads_meta')) {
         $CI->db->empty_table(db_prefix() . 'siba_leads_meta');
+    }
+    foreach ([
+        'siba_leads_didar_activities',
+        'siba_leads_didar_deals',
+        'siba_leads_didar_pipelines',
+        'siba_leads_didar_stages',
+        'siba_leads_didar_users',
+    ] as $mapTable) {
+        if ($CI->db->table_exists(db_prefix() . $mapTable)) {
+            $CI->db->empty_table(db_prefix() . $mapTable);
+        }
     }
 
     $statusesDeleted = 0;

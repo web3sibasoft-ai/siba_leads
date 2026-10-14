@@ -28,6 +28,11 @@ $hasMyActiveTask = $myActiveTasks > 0;
     <div class="panel-body lead-body siba-lead-card__body">
         <div class="siba-lead-card__header">
             <div class="siba-lead-card__identity">
+                <?php if ($locked_class === '') { ?>
+                <span class="siba-lead-card__drag-handle" title="<?= e(_l('siba_leads_drag_to_move')); ?>" aria-hidden="true">
+                    <i class="fa fa-grip-vertical"></i>
+                </span>
+                <?php } ?>
                 <div class="siba-lead-card__title-wrap">
                     <a href="<?= admin_url('leads/index/' . e($lead['id'])); ?>"
                         class="siba-lead-card__name"

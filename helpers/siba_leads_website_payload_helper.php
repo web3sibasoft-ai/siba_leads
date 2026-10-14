@@ -187,7 +187,7 @@ function siba_leads_normalize_description_value($description): string
  */
 function siba_leads_website_duplicate_detail_keys(): array
 {
-    return [
+    $keys = [
         'شناسه پیگیری',
         'شناسه پیگیری درخواست فرم',
         'شناسه فرم',
@@ -239,6 +239,12 @@ function siba_leads_website_duplicate_detail_keys(): array
         'activity',
         'unique_id',
     ];
+
+    if (function_exists('siba_leads_attribution_columns')) {
+        $keys = array_merge($keys, siba_leads_attribution_columns());
+    }
+
+    return $keys;
 }
 
 /**
@@ -256,7 +262,7 @@ function siba_leads_unique_form_detail_rows(array $map, array $native = []): arr
     }
 
     $nativeValues = [];
-    foreach ([
+    $nativeColumns = [
         'form_identifier',
         'form_source_link',
         'form_source_page_title',
@@ -267,7 +273,11 @@ function siba_leads_unique_form_detail_rows(array $map, array $native = []): arr
         'phonenumber',
         'email',
         'company',
-    ] as $column) {
+    ];
+    if (function_exists('siba_leads_attribution_columns')) {
+        $nativeColumns = array_merge($nativeColumns, siba_leads_attribution_columns());
+    }
+    foreach ($nativeColumns as $column) {
         $value = trim((string) ($native[$column] ?? ''));
         if ($value !== '') {
             $nativeValues[mb_strtolower($value)] = true;
@@ -338,6 +348,85 @@ function siba_leads_parse_description_map($description): array
 }
 
 /**
+ * Pull marketing attribution from top-level, description, or meta bag.
+ *
+ * @param array<string, mixed> $input
+ * @return array<string, mixed>
+ */
+function siba_leads_hydrate_attribution_fields(array $input): array
+{
+    if (!function_exists('siba_leads_attribution_columns')) {
+        return $input;
+    }
+
+    $bag = [];
+    if (array_key_exists('description', $input)) {
+        foreach (siba_leads_parse_description_map($input['description']) as $key => $value) {
+            $bag[(string) $key] = $value;
+        }
+    }
+    if (!empty($input['meta']) && is_array($input['meta'])) {
+        foreach ($input['meta'] as $key => $value) {
+            if (is_scalar($value) || $value === null) {
+                $bag[(string) $key] = trim((string) $value);
+            }
+        }
+    }
+
+    foreach (siba_leads_attribution_columns() as $column) {
+        $hasTop = array_key_exists($column, $input) && $input[$column] !== '' && $input[$column] !== null;
+        if ($hasTop) {
+            $input[$column] = is_bool($input[$column])
+                ? ($input[$column] ? '1' : '0')
+                : trim((string) $input[$column]);
+            continue;
+        }
+        if (isset($bag[$column]) && $bag[$column] !== '') {
+            $input[$column] = $bag[$column];
+        }
+    }
+
+    return $input;
+}
+
+/**
+ * Persist attribution columns onto an existing lead row.
+ *
+ * @param array<string, mixed> $normalized
+ */
+function siba_leads_persist_attribution_fields(int $leadId, array $normalized): void
+{
+    if ($leadId < 1 || !function_exists('siba_leads_attribution_columns')) {
+        return;
+    }
+
+    $CI = &get_instance();
+    $table = db_prefix() . 'leads';
+    if (!$CI->db->table_exists($table)) {
+        return;
+    }
+
+    $columns = $CI->db->list_fields($table);
+    $update = [];
+    foreach (siba_leads_attribution_columns() as $column) {
+        if (!in_array($column, $columns, true) || !array_key_exists($column, $normalized)) {
+            continue;
+        }
+        $value = $normalized[$column];
+        if ($value === null) {
+            continue;
+        }
+        $update[$column] = is_bool($value) ? ($value ? '1' : '0') : trim((string) $value);
+    }
+
+    if ($update === []) {
+        return;
+    }
+
+    $CI->db->where('id', $leadId)->update($table, $update);
+}
+
+/**
  * Map website / Gravity Forms payload into native Siba lead columns.
  * Keeps custom_fields for dual-write.
  *
@@ -390,6 +479,8 @@ function siba_leads_normalize_website_payload(array $input): array
     if (array_key_exists('description', $input)) {
         $input['description'] = siba_leads_normalize_description_value($input['description']);
     }
+
+    $input = siba_leads_hydrate_attribution_fields($input);
 
     return $input;
 }
@@ -475,7 +566,11 @@ function siba_leads_action_website_lead_updated($leadId): void
 
     $columns = $CI->db->list_fields($table);
     $update = [];
-    foreach (array_values(siba_leads_website_cf_column_map()) as $column) {
+    $patchColumns = array_values(siba_leads_website_cf_column_map());
+    if (function_exists('siba_leads_attribution_columns')) {
+        $patchColumns = array_merge($patchColumns, siba_leads_attribution_columns());
+    }
+    foreach ($patchColumns as $column) {
         if (!in_array($column, $columns, true)) {
             continue;
         }
@@ -522,6 +617,14 @@ function siba_leads_payload_looks_like_website(array $payload): bool
         return true;
     }
 
+    if (function_exists('siba_leads_attribution_columns')) {
+        foreach (siba_leads_attribution_columns() as $column) {
+            if (array_key_exists($column, $payload)) {
+                return true;
+            }
+        }
+    }
+
     if (defined('API') && array_key_exists('description', $payload)) {
         $map = siba_leads_parse_description_map($payload['description']);
         if ($map !== []) {
@@ -561,6 +664,13 @@ function siba_leads_sync_website_meta(int $leadId, $description, array $normaliz
             }
         }
     }
+
+    // Attribution lives on tblleads columns (also shown in form-meta UI).
+    $attributionPayload = siba_leads_hydrate_attribution_fields(array_merge($normalized, [
+        'description' => $description,
+        'meta'        => $map,
+    ]));
+    siba_leads_persist_attribution_fields($leadId, $attributionPayload);
 
     $skip = array_flip(siba_leads_website_native_meta_keys());
     $staffId = get_staff_user_id();

@@ -11,6 +11,95 @@
     padding-bottom: 24px;
 }
 
+/* Skeletons while columns load in parallel */
+.siba-kanban-skeleton {
+    list-style: none;
+    padding: 8px 4px 4px;
+    margin: 0;
+}
+
+.siba-kanban-skeleton__card {
+    height: 88px;
+    margin-bottom: 10px;
+    border-radius: 14px;
+    background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 45%, #f1f5f9 100%);
+    background-size: 200% 100%;
+    animation: siba-kanban-shimmer 1.1s ease-in-out infinite;
+}
+
+@keyframes siba-kanban-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+/* Drag / drop affordances */
+.siba-lead-card__drag-handle {
+    flex-shrink: 0;
+    width: 22px;
+    height: 28px;
+    margin-top: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    cursor: grab;
+    border-radius: 6px;
+    transition: color .15s ease, background .15s ease;
+}
+
+.siba-lead-card__drag-handle:hover {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+body.siba-kanban-dragging,
+body.siba-kanban-dragging * {
+    cursor: grabbing !important;
+}
+
+body.siba-kanban-dragging {
+    user-select: none;
+}
+
+.siba-lead-card--dragging {
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18) !important;
+    transform: rotate(1.25deg) scale(1.02);
+    pointer-events: none;
+}
+
+.siba-lead-card--origin {
+    opacity: 0.35;
+}
+
+.siba-lead-card--saving .siba-lead-card__body {
+    outline: 2px solid rgba(14, 116, 144, 0.35);
+    outline-offset: 1px;
+}
+
+.siba-kanban-placeholder {
+    min-height: 84px !important;
+    margin-bottom: 10px;
+    border: 2px dashed #94a3b8 !important;
+    border-radius: 14px !important;
+    background: rgba(14, 116, 144, 0.08) !important;
+    visibility: visible !important;
+}
+
+.siba-leads-kan-ban .kan-ban-col.siba-kanban-drop-ready .kan-ban-content-wrapper {
+    transition: box-shadow .15s ease, background-color .15s ease;
+}
+
+.siba-leads-kan-ban .kan-ban-col.siba-kanban-drop-hover .kan-ban-content-wrapper {
+    background: rgba(14, 116, 144, 0.04);
+    box-shadow: inset 0 0 0 2px rgba(14, 116, 144, 0.35);
+    border-radius: 0 0 12px 12px;
+}
+
+.siba-leads-kan-ban .leads-status {
+    min-height: 120px;
+    padding-bottom: 12px;
+}
+
 .siba-leads-kan-ban .kan-ban-col {
     min-width: 320px;
     float: none;

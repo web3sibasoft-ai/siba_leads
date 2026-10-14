@@ -6,9 +6,54 @@
         hideLeadFields: window.sibaLeadsHideLeadFields || {}
     };
 
+    var sibaKanbanSearchTimer = null;
+    var sibaKanbanLoadToken = 0;
+    var sibaKanbanMoveBusy = {};
+
     window.siba_leads_kanban_sort = function (type) {
         if (typeof kan_ban_sort === 'function') {
             kan_ban_sort(type, siba_leads_kanban);
+        }
+    };
+
+    window.siba_leads_kanban_search = function () {
+        clearTimeout(sibaKanbanSearchTimer);
+        sibaKanbanSearchTimer = setTimeout(function () {
+            if (typeof siba_leads_kanban === 'function') {
+                siba_leads_kanban();
+            }
+        }, 320);
+    };
+
+    window.siba_leads_kanban_filter_changed = function () {
+        var $none = $('#siba_leads_tag_none');
+        var $tags = $('select[name="siba_leads_tags[]"]');
+        if ($none.is(':checked') && $tags.length) {
+            if (typeof $tags.selectpicker === 'function') {
+                $tags.selectpicker('val', []);
+                $tags.selectpicker('refresh');
+            } else {
+                $tags.val(null);
+            }
+        }
+        if (typeof siba_leads_kanban === 'function') {
+            siba_leads_kanban();
+        }
+    };
+
+    window.siba_leads_list_filter_changed = function () {
+        var $none = $('#siba_leads_tag_none');
+        var $tags = $('select[name="siba_leads_tags[]"]');
+        if ($none.is(':checked') && $tags.length) {
+            if (typeof $tags.selectpicker === 'function') {
+                $tags.selectpicker('val', []);
+                $tags.selectpicker('refresh');
+            } else {
+                $tags.val(null);
+            }
+        }
+        if ($.fn.DataTable && $.fn.DataTable.isDataTable('.table-siba-leads')) {
+            $('.table-siba-leads').DataTable().ajax.reload();
         }
     };
 
@@ -17,48 +62,117 @@
             return;
         }
 
+        var $item = $(ui.item);
+        var leadId = String($item.attr('data-lead-id') || '');
+        if (!leadId || sibaKanbanMoveBusy[leadId]) {
+            return;
+        }
+
+        var $newList = $item.parent();
+        var newStatus = String($newList.attr('data-lead-status-id') || '');
+        var oldStatus = ui.sender
+            ? String($(ui.sender).attr('data-lead-status-id') || '')
+            : newStatus;
+        var $oldList = ui.sender ? $(ui.sender) : $newList;
+        var originNext = $item.data('siba-origin-next') || null;
         var data = {
-            status: $(ui.item.parent()[0]).attr('data-lead-status-id'),
-            leadid: $(ui.item).attr('data-lead-id'),
+            status: newStatus,
+            leadid: leadId,
             order: []
         };
 
-        $.each($(ui.item).parents('.leads-status').find('li'), function (idx, el) {
+        $.each($newList.children('li.lead-kan-ban'), function (idx, el) {
             var id = $(el).attr('data-lead-id');
             if (id) {
                 data.order.push([id, idx + 1]);
             }
         });
 
-        setTimeout(function () {
-            $.post(admin_url + 'siba_leads/update_lead_status', data).done(function () {
+        var movedAcross = ui.sender && String(oldStatus) !== String(newStatus);
+        if (movedAcross) {
+            siba_leads_bump_column_header_count(oldStatus, -1);
+            siba_leads_bump_column_header_count(newStatus, 1);
+            siba_leads_sync_column_empty_state($oldList.closest('.kan-ban-col'));
+            siba_leads_sync_column_empty_state($item.closest('.kan-ban-col'));
+        }
+
+        sibaKanbanMoveBusy[leadId] = true;
+        $item.addClass('siba-lead-card--saving');
+
+        $.post(admin_url + 'siba_leads/update_lead_status', data)
+            .done(function (res) {
+                var ok = true;
+                if (typeof res === 'string') {
+                    try {
+                        res = JSON.parse(res);
+                    } catch (e) {
+                        res = null;
+                    }
+                }
+                if (res && typeof res.success !== 'undefined') {
+                    ok = !!res.success;
+                }
+                if (!ok) {
+                    siba_leads_revert_card_move($item, $oldList, originNext, oldStatus, newStatus, movedAcross);
+                    if (typeof alert_float === 'function') {
+                        alert_float('danger', (res && res.message) || (window.sibaLeadsMoveFailed || 'Move failed'));
+                    }
+                    return;
+                }
                 if (typeof update_kan_ban_total_when_moving === 'function') {
                     update_kan_ban_total_when_moving(ui, data.status);
                 }
-                // Keep the card in place — avoid full-board HTML reload on every drag.
-                if (ui.sender) {
-                    var $oldCol = $(ui.sender).closest('.kan-ban-col');
-                    var oldStatusId = $oldCol.attr('data-col-status-id');
-                    if (oldStatusId && String(oldStatusId) !== String(data.status)) {
-                        siba_leads_bump_column_header_count(oldStatusId, -1);
-                        siba_leads_bump_column_header_count(data.status, 1);
-                    }
-                    // Toggle empty placeholders without reloading the board.
-                    var $newCol = $(ui.item).closest('.kan-ban-col');
-                    siba_leads_sync_column_empty_state($oldCol);
-                    siba_leads_sync_column_empty_state($newCol);
+            })
+            .fail(function () {
+                siba_leads_revert_card_move($item, $oldList, originNext, oldStatus, newStatus, movedAcross);
+                if (typeof alert_float === 'function') {
+                    alert_float('danger', window.sibaLeadsMoveFailed || 'Move failed');
                 }
+            })
+            .always(function () {
+                delete sibaKanbanMoveBusy[leadId];
+                $item.removeClass('siba-lead-card--saving');
+                $item.removeData('siba-origin-next');
             });
-        }, 200);
+    };
+
+    window.siba_leads_revert_card_move = function ($item, $oldList, originNext, oldStatus, newStatus, movedAcross) {
+        if (!$item || !$item.length || !$oldList || !$oldList.length) {
+            return;
+        }
+        if (originNext && originNext.parentNode === $oldList[0]) {
+            $(originNext).before($item);
+        } else {
+            var $util = $oldList.children('.kanban-load-more, .kanban-empty, .siba-kanban-skeleton').first();
+            if ($util.length) {
+                $util.before($item);
+            } else {
+                $oldList.append($item);
+            }
+        }
+        $oldList.append($oldList.children('.kanban-load-more, .kanban-empty, .siba-kanban-skeleton').detach());
+
+        if (movedAcross) {
+            siba_leads_bump_column_header_count(newStatus, -1);
+            siba_leads_bump_column_header_count(oldStatus, 1);
+            siba_leads_sync_column_empty_state($oldList.closest('.kan-ban-col'));
+            var $newCol = $('.kan-ban-col[data-col-status-id="' + newStatus + '"]');
+            siba_leads_sync_column_empty_state($newCol);
+        }
     };
 
     window.siba_leads_sync_column_empty_state = function ($col) {
         if (!$col || !$col.length) {
             return;
         }
+        if ($col.attr('data-siba-loaded') !== '1') {
+            return;
+        }
         var hasCards = $col.find('li.lead-kan-ban').length > 0;
         $col.find('.kanban-empty').toggleClass('hide', hasCards);
-        $col.find('.kanban-load-more').toggleClass('hide', !hasCards);
+        var totalPages = parseInt($col.attr('data-total-pages'), 10) || 0;
+        var page = parseInt($col.find('.kanban-load-more a').attr('data-page'), 10) || 1;
+        $col.find('.kanban-load-more').toggleClass('hide', !hasCards || totalPages <= 1 || page >= totalPages);
     };
 
     /**
@@ -145,9 +259,17 @@
             || document.body.classList.contains('rtl');
         $('#kan-ban').css('direction', rtl ? 'rtl' : 'ltr');
 
+        if ($('#kan-ban').data('ui-sortable')) {
+            $('#kan-ban').sortable('destroy');
+        }
+
         $('#kan-ban').sortable({
             helper: 'clone',
             item: '.kan-ban-col',
+            handle: '.panel-heading .fa-reorder',
+            axis: 'x',
+            tolerance: 'pointer',
+            distance: 6,
             update: function () {
                 var data = { order: [] };
 
@@ -158,6 +280,218 @@
                 $.post(admin_url + 'siba_leads/update_status_order', data);
             }
         });
+    };
+
+    /**
+     * Card drag/drop between status columns — smoother than core init_kanban defaults.
+     */
+    window.siba_leads_init_card_sortable = function () {
+        var $lists = $('.siba-leads-kan-ban .leads-status');
+        if (!$lists.length) {
+            return;
+        }
+
+        if ($lists.data('ui-sortable')) {
+            $lists.sortable('destroy');
+        }
+
+        var $boardScroll = $('#kan-ban-tab');
+        var edgePx = 56;
+        var scrollStep = 28;
+
+        $lists.sortable({
+            connectWith: '.siba-leads-kan-ban .leads-status',
+            items: '> li.lead-kan-ban:not(.not-sortable)',
+            handle: '.siba-lead-card__drag-handle, .siba-lead-card__body',
+            cancel: 'a, button, input, select, textarea, .siba-lead-card__expand, .siba-lead-card__actions, .siba-lead-card__contacts, .siba-lead-card__fail-btn',
+            placeholder: 'ui-state-highlight-card siba-kanban-placeholder',
+            forcePlaceholderSize: true,
+            tolerance: 'pointer',
+            distance: 8,
+            opacity: 0.96,
+            revert: 120,
+            cursor: 'grabbing',
+            cursorAt: { top: 24, left: 40 },
+            appendTo: '#kan-ban-tab',
+            helper: function (event, item) {
+                var $helper = item.clone();
+                $helper.addClass('siba-lead-card--dragging');
+                $helper.css({
+                    width: item.outerWidth(),
+                    maxWidth: item.outerWidth(),
+                    zIndex: 10050
+                });
+                return $helper;
+            },
+            start: function (event, ui) {
+                $('body').addClass('siba-kanban-dragging');
+                ui.item.addClass('siba-lead-card--origin');
+                ui.item.data('siba-origin-next', ui.item.next()[0] || null);
+                ui.placeholder.height(Math.max(72, ui.item.outerHeight()));
+                $('.siba-leads-kan-ban .kan-ban-col').addClass('siba-kanban-drop-ready');
+            },
+            sort: function (event, ui) {
+                // Vertical scroll inside the column.
+                var scrollContainer = $(ui.placeholder).closest('.kan-ban-content-wrapper')[0];
+                if (scrollContainer) {
+                    var overflowOffset = $(scrollContainer).offset();
+                    if (overflowOffset) {
+                        if (overflowOffset.top + scrollContainer.offsetHeight - event.pageY < 40) {
+                            scrollContainer.scrollTop += 24;
+                        } else if (event.pageY - overflowOffset.top < 40) {
+                            scrollContainer.scrollTop -= 24;
+                        }
+                    }
+                }
+
+                // Horizontal board scroll between columns / teams.
+                if ($boardScroll.length) {
+                    var boardOffset = $boardScroll.offset();
+                    var boardWidth = $boardScroll.outerWidth();
+                    var rtl = document.documentElement.getAttribute('dir') === 'rtl'
+                        || document.body.classList.contains('rtl');
+                    var nearStart = event.pageX - boardOffset.left < edgePx;
+                    var nearEnd = boardOffset.left + boardWidth - event.pageX < edgePx;
+                    if (rtl) {
+                        if (nearStart) {
+                            $boardScroll.scrollLeft($boardScroll.scrollLeft() + scrollStep);
+                        } else if (nearEnd) {
+                            $boardScroll.scrollLeft($boardScroll.scrollLeft() - scrollStep);
+                        }
+                    } else if (nearEnd) {
+                        $boardScroll.scrollLeft($boardScroll.scrollLeft() + scrollStep);
+                    } else if (nearStart) {
+                        $boardScroll.scrollLeft($boardScroll.scrollLeft() - scrollStep);
+                    }
+                }
+
+                var $overCol = ui.placeholder.closest('.kan-ban-col');
+                $('.siba-leads-kan-ban .kan-ban-col').removeClass('siba-kanban-drop-hover');
+                if ($overCol.length) {
+                    $overCol.addClass('siba-kanban-drop-hover');
+                }
+            },
+            change: function () {
+                var $list = $(this);
+                $list.append($list.children('.kanban-load-more, .kanban-empty, .siba-kanban-skeleton').detach());
+            },
+            stop: function (event, ui) {
+                $('body').removeClass('siba-kanban-dragging');
+                ui.item.removeClass('siba-lead-card--origin');
+                $('.siba-leads-kan-ban .kan-ban-col')
+                    .removeClass('siba-kanban-drop-ready siba-kanban-drop-hover');
+            },
+            update: function (event, ui) {
+                siba_leads_kanban_update(ui, this);
+            }
+        });
+    };
+
+    window.siba_leads_build_kanban_params = function () {
+        var parameters = {};
+        var _kanban_param_val;
+
+        $.each($('#kanban-params input'), function () {
+            if ($(this).attr('type') == 'checkbox') {
+                _kanban_param_val = $(this).prop('checked') === true ? $(this).val() : '';
+            } else {
+                _kanban_param_val = $(this).val();
+            }
+            if (_kanban_param_val !== '') {
+                parameters[$(this).attr('name')] = _kanban_param_val;
+            }
+        });
+
+        var search = $('input[name="search"]').val();
+        if (typeof search != 'undefined' && search !== '') {
+            parameters.search = search;
+        }
+
+        if ($('#siba_leads_tag_none').is(':checked')) {
+            parameters.tag_none = '1';
+        } else {
+            var tagVals = $('select[name="siba_leads_tags[]"]').val();
+            if (tagVals && tagVals.length) {
+                parameters.tags = $.isArray(tagVals) ? tagVals.join(',') : String(tagVals);
+            }
+        }
+
+        var sort_type = $('input[name="sort_type"]');
+        var sort = $('input[name="sort"]').val();
+        if (sort_type.length != 0 && sort_type.val() !== '') {
+            parameters.sort_by = sort_type.val();
+            parameters.sort = sort;
+        }
+
+        parameters.kanban = true;
+        return parameters;
+    };
+
+    window.siba_leads_fill_kanban_column = function (statusId, params, token) {
+        var $col = $('.kan-ban-col[data-col-status-id="' + statusId + '"]');
+        if (!$col.length) {
+            return $.Deferred().resolve().promise();
+        }
+
+        var request = $.extend({}, params, {
+            status: statusId,
+            total_pages: parseInt($col.attr('data-total-pages'), 10) || 0
+        });
+        var refresh = $col.attr('data-siba-refresh');
+        if (refresh !== undefined && refresh !== null && refresh !== '') {
+            request.refresh = refresh;
+        }
+
+        var url = typeof buildUrl === 'function'
+            ? buildUrl(admin_url + 'siba_leads/kanban_column', request)
+            : (admin_url + 'siba_leads/kanban_column?' + $.param(request));
+
+        return $.getJSON(url)
+            .done(function (res) {
+                if (token !== sibaKanbanLoadToken) {
+                    return;
+                }
+                $col.find('.siba-kanban-skeleton').remove();
+                $col.attr('data-siba-loaded', '1');
+
+                var $list = $col.find('.leads-status');
+                var $loadMore = $list.children('.kanban-load-more');
+                var $empty = $list.children('.kanban-empty');
+                $list.children('li.lead-kan-ban').remove();
+
+                if (res && res.html) {
+                    if ($loadMore.length) {
+                        $loadMore.before(res.html);
+                    } else {
+                        $list.prepend(res.html);
+                    }
+                }
+
+                var count = (res && res.count) ? parseInt(res.count, 10) : $col.find('li.lead-kan-ban').length;
+                var page = (res && res.page) ? parseInt(res.page, 10) : 1;
+                var totalPages = (res && typeof res.total_pages !== 'undefined')
+                    ? parseInt(res.total_pages, 10)
+                    : (parseInt($col.attr('data-total-pages'), 10) || 0);
+
+                $col.attr('data-total', count);
+                $col.attr('data-total-pages', totalPages);
+                $loadMore.find('a').attr('data-page', page);
+                $loadMore.find('a').toggleClass('disabled', !(res && res.has_more));
+                $loadMore.toggleClass('hide', !count || !(res && res.has_more));
+                $empty.toggleClass('hide', !!count);
+
+                if (typeof $ !== 'undefined' && $.fn.tooltip) {
+                    $col.find('[data-toggle="tooltip"]').tooltip({ container: 'body' });
+                }
+            })
+            .fail(function () {
+                if (token !== sibaKanbanLoadToken) {
+                    return;
+                }
+                $col.find('.siba-kanban-skeleton').remove();
+                $col.attr('data-siba-loaded', '1');
+                siba_leads_sync_column_empty_state($col);
+            });
     };
 
     window.siba_leads_add_fin_approve_req = function (id) {
@@ -222,18 +556,72 @@
     };
 
     window.siba_leads_kanban = function () {
-        if (typeof init_kanban !== 'function') {
+        if (!$('#kan-ban').length) {
             return;
         }
 
-        init_kanban(
-            'siba_leads/kanban',
-            siba_leads_kanban_update,
-            '.leads-status',
-            290,
-            360,
-            siba_leads_init_status_sortable
-        );
+        var parameters = siba_leads_build_kanban_params();
+        var shellUrl = typeof buildUrl === 'function'
+            ? buildUrl(admin_url + 'siba_leads/kanban', parameters)
+            : (admin_url + 'siba_leads/kanban?' + $.param(parameters));
+
+        var refreshBits = [];
+        $('.kan-ban-col').each(function () {
+            var status = $(this).data('col-status-id');
+            var total = parseInt($(this).attr('data-total'), 10) || 0;
+            if (status && total > 0) {
+                refreshBits.push('refresh[' + status + ']=' + total);
+            }
+        });
+        if (refreshBits.length) {
+            shellUrl += (shellUrl.indexOf('?') === -1 ? '?' : '&') + refreshBits.join('&');
+        }
+
+        var token = ++sibaKanbanLoadToken;
+        $('body').append('<div class="dt-loader"></div>');
+
+        $('#kan-ban').load(shellUrl, function () {
+            $('body').find('.dt-loader').remove();
+            if (token !== sibaKanbanLoadToken) {
+                return;
+            }
+
+            if (typeof fix_kanban_height === 'function') {
+                fix_kanban_height(290, 360);
+            }
+            siba_leads_init_status_sortable();
+
+            var params = siba_leads_build_kanban_params();
+            var statusIds = [];
+            $('.kan-ban-col').each(function () {
+                var id = $(this).attr('data-col-status-id');
+                if (id) {
+                    statusIds.push(id);
+                }
+            });
+
+            if (!statusIds.length) {
+                return;
+            }
+
+            // Parallel column fetches — board paints shells first, cards stream in.
+            var jobs = statusIds.map(function (statusId) {
+                return siba_leads_fill_kanban_column(statusId, params, token);
+            });
+
+            $.when.apply($, jobs).always(function () {
+                if (token !== sibaKanbanLoadToken) {
+                    return;
+                }
+                siba_leads_init_card_sortable();
+                if (typeof fix_kanban_height === 'function') {
+                    fix_kanban_height(290, 360);
+                }
+                $('.kan-ban-col').each(function () {
+                    siba_leads_sync_column_empty_state($(this));
+                });
+            });
+        });
     };
 
     function normalizeLabel(text) {
@@ -1049,6 +1437,25 @@
         });
     }
 
+    function getAttributionColumns() {
+        return $.isArray(window.sibaLeadsAttributionColumns)
+            ? window.sibaLeadsAttributionColumns
+            : [
+                'cta_location',
+                'industry',
+                'traffic_source',
+                'utm_source',
+                'utm_medium',
+                'utm_campaign',
+                'utm_content',
+                'utm_term',
+                'gclid',
+                'gbraid',
+                'wbraid',
+                'device_type'
+            ];
+    }
+
     function getFormMetaLabels() {
         return window.sibaLeadsFormMetaLabels || {
             title: 'Website form info',
@@ -1062,8 +1469,17 @@
             packageNumber: 'Package number',
             requestType: 'Request type',
             descriptionMap: 'More details',
-            extraMeta: 'Additional form fields'
+            extraMeta: 'Additional form fields',
+            attribution: {}
         };
+    }
+
+    function attributionLabel(key) {
+        var labels = getFormMetaLabels();
+        if (labels.attribution && labels.attribution[key]) {
+            return labels.attribution[key];
+        }
+        return key;
     }
 
     function escapeHtml(value) {
@@ -1091,14 +1507,18 @@
     }
 
     function formMetaNativeValues(seed) {
-        return [
+        var values = [
             seed.form_identifier,
             seed.form_source_link,
             seed.form_source_page_title,
             seed.demo_request_tracking_id,
             seed.user_package_number,
             seed.request_type
-        ].map(function (v) {
+        ];
+        $.each(getAttributionColumns(), function (i, key) {
+            values.push(seed[key]);
+        });
+        return values.map(function (v) {
             return String(v || '').trim().toLowerCase();
         }).filter(Boolean);
     }
@@ -1167,7 +1587,7 @@
             'email',
             'activity',
             'unique_id'
-        ];
+        ].concat(getAttributionColumns());
         for (var i = 0; i < blocked.length; i++) {
             if (normalized === String(blocked[i]).toLowerCase()) {
                 return true;
@@ -1227,7 +1647,7 @@
             'demo_request_tracking_id',
             'user_package_number',
             'request_type'
-        ];
+        ].concat(getAttributionColumns());
         for (var i = 0; i < keys.length; i++) {
             if (String(seed[keys[i]] || '').trim() !== '') {
                 return true;
@@ -1265,7 +1685,7 @@
         }
         var labels = getFormMetaLabels();
         var labelSet = {};
-        $.each([
+        var hideLabels = [
             labels.formIdentifier,
             labels.formSourceLink,
             labels.formSourcePageTitle,
@@ -1281,7 +1701,12 @@
             'نوع درخواست',
             'تایید پیامک',
             'پیامک'
-        ], function (i, label) {
+        ];
+        $.each(getAttributionColumns(), function (i, attrKey) {
+            hideLabels.push(attributionLabel(attrKey));
+            hideLabels.push(attrKey);
+        });
+        $.each(hideLabels, function (i, label) {
             var key = String(label || '').trim().toLowerCase();
             if (key) {
                 labelSet[key] = true;
@@ -1371,6 +1796,9 @@
                 formatFormMetaValue(seed.form_source_link)
             );
         }
+        $.each(getAttributionColumns(), function (i, key) {
+            appendFormMetaChip($chips, attributionLabel(key), formatFormMetaValue(seed[key]));
+        });
         if ($chips.children().length) {
             $card.append($chips);
         }
@@ -1908,6 +2336,73 @@
         });
     }
 
+    function restrictLeadModalTagsToExisting($modal) {
+        $modal = $modal && $modal.length ? $modal : $('#lead-modal');
+        var $input = $modal.find('#inputTagsWrapper input.tagsinput, #inputTagsWrapper #tags');
+        if (!$input.length || typeof $input.tagit !== 'function') {
+            return;
+        }
+
+        var available = (typeof app !== 'undefined' && Array.isArray(app.available_tags))
+            ? app.available_tags.slice()
+            : [];
+        var availableIds = (typeof app !== 'undefined' && Array.isArray(app.available_tags_ids))
+            ? app.available_tags_ids.slice()
+            : [];
+        var availableLower = available.map(function (t) {
+            return String(t).toLowerCase();
+        });
+
+        try {
+            if ($input.data('ui-tagit')) {
+                $input.tagit('destroy');
+            }
+        } catch (e) { /* ignore */ }
+
+        $input.tagit({
+            availableTags: available,
+            allowSpaces: true,
+            animate: false,
+            placeholderText: (typeof app !== 'undefined' && app.lang && app.lang.tag) ? app.lang.tag : '',
+            showAutocompleteOnFocus: true,
+            caseSensitive: false,
+            autocomplete: {
+                appendTo: '#inputTagsWrapper'
+            },
+            beforeTagAdded: function (event, ui) {
+                if (ui.duringInitialization) {
+                    return true;
+                }
+                var label = $.trim(ui.tagLabel || '');
+                if (availableLower.indexOf(label.toLowerCase()) === -1) {
+                    if (typeof alert_float === 'function') {
+                        alert_float('warning', window.sibaLeadsTagMustExist || 'Use an existing tag from the list.');
+                    }
+                    return false;
+                }
+                return true;
+            },
+            afterTagAdded: function (event, ui) {
+                var label = $.trim($(ui.tag).find('.tagit-label').text());
+                var tagIndexAvailable = availableLower.indexOf(label.toLowerCase());
+                if (tagIndexAvailable > -1) {
+                    var _tagId = availableIds[tagIndexAvailable];
+                    if (_tagId) {
+                        $(ui.tag).addClass('tag-id-' + _tagId);
+                    }
+                }
+                if (typeof showHideTagsPlaceholder === 'function') {
+                    showHideTagsPlaceholder($(this));
+                }
+            },
+            afterTagRemoved: function () {
+                if (typeof showHideTagsPlaceholder === 'function') {
+                    showHideTagsPlaceholder($(this));
+                }
+            }
+        });
+    }
+
     function enhanceLeadModal() {
         var $modal = $('#lead-modal');
         if (!$modal.length || !$modal.find('.modal-content .data, .lead-wrapper, .modal-header').length) {
@@ -1944,6 +2439,7 @@
         bindLeadPhoneUnique($modal);
         ensureLeadModalSelectsEnabled($modal);
         markLeadOrderRequiredFields($modal);
+        restrictLeadModalTagsToExisting($modal);
 
         // Proposals not used for now — hide tab + pane.
         $modal.find('a[href="#tab_proposals_leads"]').closest('li').addClass('siba-hide-lead-field');

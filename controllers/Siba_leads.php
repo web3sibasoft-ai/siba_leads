@@ -44,8 +44,10 @@ class Siba_leads extends AdminController
             || $this->session->userdata('siba_leads_kanban_view') === 'true';
 
         $data['title']         = $isKanBan ? _l('siba_leads_kanban') : _l('siba_leads_list');
-        $data['statuses']      = $this->leads_model->get_status();
-        $data['summary']       = siba_leads_get_summary();
+        $data['statuses']      = function_exists('siba_leads_kanban_statuses')
+            ? siba_leads_kanban_statuses()
+            : $this->leads_model->get_status();
+        // Summary is loaded with the kanban AJAX shells — skip the heavy UNION on page paint.
         $data['base_currency'] = get_base_currency();
         $data['isKanBan']      = $isKanBan;
         $data['switch_kanban'] = $isKanBan ? 0 : 1;
@@ -60,6 +62,17 @@ class Siba_leads extends AdminController
         }
         $this->load->model('siba_leads/siba_leads_failure_reasons_model');
         $data['failure_reasons'] = $this->siba_leads_failure_reasons_model->get();
+        $data['tags']            = function_exists('get_tags') ? get_tags() : [];
+        $data['pipelines']       = function_exists('siba_leads_didar_list_pipeline_maps')
+            ? siba_leads_didar_list_pipeline_maps()
+            : [];
+        $data['active_pipeline_id'] = function_exists('siba_leads_active_pipeline_id')
+            ? siba_leads_active_pipeline_id()
+            : '';
+        $activePipeline = function_exists('siba_leads_active_pipeline_map')
+            ? siba_leads_active_pipeline_map()
+            : null;
+        $data['active_pipeline_tag_id'] = (int) ($activePipeline['tag_id'] ?? 0);
 
         $this->load->view('siba_leads/manage', $data);
     }
@@ -78,6 +91,29 @@ class Siba_leads extends AdminController
     }
 
     /**
+     * Switch the active Didar pipeline board (different columns per pipeline).
+     *
+     * @param string $pipelineId Didar pipeline UUID
+     */
+    public function switch_pipeline($pipelineId = '')
+    {
+        $pipelineId = trim(rawurldecode((string) $pipelineId));
+        $valid      = false;
+        if ($pipelineId !== '' && function_exists('siba_leads_didar_list_pipeline_maps')) {
+            foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+                if (trim((string) ($row['didar_pipeline_id'] ?? '')) === $pipelineId) {
+                    $valid = true;
+                    break;
+                }
+            }
+        }
+        $this->session->set_userdata([
+            'siba_leads_active_pipeline_id' => $valid ? $pipelineId : '',
+        ]);
+        redirect(admin_url('siba_leads'));
+    }
+
+    /**
      * DataTables JSON for the list view (same open-lead scope as the kanban).
      */
     public function table()
@@ -89,6 +125,10 @@ class Siba_leads extends AdminController
         $this->load->helper('datatables');
 
         $prefix = db_prefix();
+        $tagsSubquery = '(SELECT GROUP_CONCAT(name ORDER BY tag_order ASC SEPARATOR ",") FROM ' . $prefix . 'taggables'
+            . ' JOIN ' . $prefix . 'tags ON ' . $prefix . 'taggables.tag_id = ' . $prefix . 'tags.id'
+            . ' WHERE rel_id = ' . $prefix . 'leads.id AND rel_type="lead") as tags';
+
         $aColumns = [
             $prefix . 'leads.id as id',
             $prefix . 'leads.name as name',
@@ -98,6 +138,7 @@ class Siba_leads extends AdminController
             'firstname as assigned_firstname',
             $prefix . 'leads_status.name as status_name',
             $prefix . 'leads_sources.name as source_name',
+            $tagsSubquery,
             $prefix . 'leads.lastcontact as lastcontact',
             $prefix . 'leads.dateadded as dateadded',
         ];
@@ -115,6 +156,17 @@ class Siba_leads extends AdminController
         ];
         if (!siba_leads_can_view_all()) {
             $where[] = 'AND ' . $prefix . 'leads.assigned = ' . (int) get_staff_user_id();
+        }
+
+        $tagFilter = function_exists('siba_leads_request_tag_filter')
+            ? siba_leads_request_tag_filter()
+            : ['tag_ids' => [], 'tag_none' => false];
+        $taggables = $prefix . 'taggables';
+        if (!empty($tagFilter['tag_none'])) {
+            $where[] = 'AND ' . $prefix . 'leads.id NOT IN (SELECT rel_id FROM ' . $taggables . " WHERE rel_type = 'lead')";
+        } elseif (!empty($tagFilter['tag_ids'])) {
+            $where[] = 'AND ' . $prefix . 'leads.id IN (SELECT rel_id FROM ' . $taggables
+                . " WHERE rel_type = 'lead' AND tag_id IN (" . implode(',', array_map('intval', $tagFilter['tag_ids'])) . '))';
         }
 
         $additionalSelect = [
@@ -175,6 +227,9 @@ class Siba_leads extends AdminController
             }
 
             $row[] = e($aRow['source_name'] ?? '');
+            $row[] = !empty($aRow['tags']) && function_exists('render_tags')
+                ? render_tags($aRow['tags'])
+                : '';
 
             $last = $aRow['lastcontact'] ?? '';
             $row[] = ($last === '0000-00-00 00:00:00' || !is_date($last))
@@ -478,11 +533,92 @@ class Siba_leads extends AdminController
             show_404();
         }
 
-        $data['statuses']      = $this->leads_model->get_status();
+        $data['statuses']      = function_exists('siba_leads_kanban_statuses')
+            ? siba_leads_kanban_statuses()
+            : $this->leads_model->get_status();
         $data['base_currency'] = get_base_currency();
         $data['summary']       = siba_leads_get_summary();
 
         echo $this->load->view('siba_leads/kan-ban', $data, true);
+    }
+
+    /**
+     * First-page (or refresh) cards for one status column — loaded in parallel by the board.
+     */
+    public function kanban_column()
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        $statusId = (int) $this->input->get('status');
+        $this->db->where(db_prefix() . 'leads_status.id', $statusId);
+        $status = $this->db->get(db_prefix() . 'leads_status')->row_array();
+
+        if (!$status || !empty($status['isdefault'])) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'html' => '', 'count' => 0, 'page' => 1, 'total_pages' => 0]);
+
+            return;
+        }
+
+        $kanBan = siba_leads_kanban_for_status($status['id'])
+            ->search($this->input->get('search'))
+            ->sortBy(
+                $this->input->get('sort_by'),
+                $this->input->get('sort')
+            );
+        if (function_exists('siba_leads_kanban_apply_tag_filter')) {
+            $kanBan = siba_leads_kanban_apply_tag_filter($kanBan);
+        }
+
+        $refresh = $this->input->get('refresh');
+        if ($refresh !== null && $refresh !== '') {
+            $kanBan->refresh($refresh);
+        }
+
+        $leads         = $kanBan->get();
+        $base_currency = get_base_currency();
+        $html          = '';
+        foreach ($leads as $lead) {
+            $html .= $this->load->view('siba_leads/_kan_ban_card', [
+                'lead'          => $lead,
+                'status'        => $status,
+                'base_currency' => $base_currency,
+            ], true);
+        }
+
+        $searchQ     = $this->input->get('search');
+        $tagFilter   = function_exists('siba_leads_request_tag_filter')
+            ? siba_leads_request_tag_filter()
+            : ['tag_ids' => [], 'tag_none' => false];
+        $hasTagFilter = !empty($tagFilter['tag_none']) || !empty($tagFilter['tag_ids']);
+        $limit       = max(1, (int) $kanBan->limit());
+        $count       = count($leads);
+        $total_pages = (int) $this->input->get('total_pages');
+        // Search/tag filter needs a real count; otherwise trust shell total_pages from the summary.
+        if (($searchQ !== null && $searchQ !== '') || $hasTagFilter) {
+            $total_pages = (int) $kanBan->totalPages();
+        } elseif ($total_pages < 0) {
+            $total_pages = 0;
+        }
+
+        $page = max(1, (int) $kanBan->getPage());
+        // When refresh loads multiple pages worth of cards, treat as that page for load-more.
+        if ($refresh !== null && $refresh !== '' && $limit > 0) {
+            $page = max(1, (int) ceil($count / $limit));
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success'     => true,
+            'status'      => (int) $status['id'],
+            'html'        => $html,
+            'count'       => $count,
+            'page'        => $page,
+            'total_pages' => $total_pages,
+            'has_more'    => $total_pages > $page,
+        ], JSON_UNESCAPED_UNICODE);
     }
 
     public function kanban_load_more()
@@ -501,14 +637,17 @@ class Siba_leads extends AdminController
             return;
         }
 
-        $leads = siba_leads_kanban_for_status($status['id'])
+        $kanBan = siba_leads_kanban_for_status($status['id'])
             ->search($this->input->get('search'))
             ->sortBy(
                 $this->input->get('sort_by'),
                 $this->input->get('sort')
             )
-            ->page($page)
-            ->get();
+            ->page($page);
+        if (function_exists('siba_leads_kanban_apply_tag_filter')) {
+            $kanBan = siba_leads_kanban_apply_tag_filter($kanBan);
+        }
+        $leads = $kanBan->get();
 
         foreach ($leads as $lead) {
             $this->load->view('siba_leads/_kan_ban_card', [
@@ -553,18 +692,40 @@ class Siba_leads extends AdminController
 
     public function update_lead_status()
     {
-        if ($this->input->post() && $this->input->is_ajax_request()) {
-            if (!is_admin() && !staff_can('edit', SIBA_LEADS_MODULE_NAME) && staff_cant('edit', 'leads')) {
-                ajax_access_denied();
-            }
-
-            $leadId = (int) $this->input->post('leadid');
-            if (!siba_leads_can_manage_lead($leadId)) {
-                ajax_access_denied();
-            }
-
-            $this->leads_model->update_lead_status($this->input->post());
+        if (!$this->input->post() || !$this->input->is_ajax_request()) {
+            show_404();
         }
+
+        if (!is_admin() && !staff_can('edit', SIBA_LEADS_MODULE_NAME) && staff_cant('edit', 'leads')) {
+            ajax_access_denied();
+        }
+
+        $leadId   = (int) $this->input->post('leadid');
+        $statusId = (int) $this->input->post('status');
+        if ($leadId < 1 || $statusId < 1 || !siba_leads_can_manage_lead($leadId)) {
+            ajax_access_denied();
+        }
+
+        $this->db->where(db_prefix() . 'leads_status.id', $statusId);
+        $statusRow = $this->db->get(db_prefix() . 'leads_status')->row();
+        if (!$statusRow || !empty($statusRow->isdefault)) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'success' => false,
+                'message' => _l('siba_leads_move_failed'),
+            ], JSON_UNESCAPED_UNICODE);
+
+            return;
+        }
+
+        $this->leads_model->update_lead_status($this->input->post());
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => true,
+            'leadid'  => $leadId,
+            'status'  => $statusId,
+        ], JSON_UNESCAPED_UNICODE);
     }
 
     public function update_status_order()
@@ -736,6 +897,124 @@ class Siba_leads extends AdminController
     }
 
     /**
+     * CRUD: lead tags (Perfex global tags table, used with rel_type=lead).
+     */
+    public function tags()
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        $prefix = db_prefix();
+        $tags   = function_exists('get_tags') ? get_tags() : [];
+        foreach ($tags as &$tag) {
+            $tag['usage_count'] = (int) total_rows($prefix . 'taggables', [
+                'tag_id'   => (int) $tag['id'],
+                'rel_type' => 'lead',
+            ]);
+        }
+        unset($tag);
+
+        $data['title'] = _l('siba_leads_tags');
+        $data['tags']  = $tags;
+
+        $this->load->view('siba_leads/tags/manage', $data);
+    }
+
+    public function tag_modal($id = '')
+    {
+        if (!is_admin() || !$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        $data['tag'] = null;
+        $id = (int) $id;
+        if ($id > 0) {
+            $row = $this->db->where('id', $id)->get(db_prefix() . 'tags')->row_array();
+            $data['tag'] = $row ?: null;
+        }
+
+        echo json_encode([
+            'success' => true,
+            'view'    => $this->load->view('siba_leads/tags/modal', $data, true),
+        ]);
+    }
+
+    public function tag_save()
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        if (!$this->input->post()) {
+            redirect(admin_url('siba_leads/tags'));
+        }
+
+        $id   = (int) $this->input->post('id');
+        $name = trim((string) $this->input->post('name'));
+        $name = str_replace('"', "'", $name);
+
+        if ($name === '') {
+            set_alert('warning', _l('siba_leads_tag_name_required'));
+            redirect(admin_url('siba_leads/tags'));
+        }
+
+        $this->db->where('name', $name);
+        if ($id > 0) {
+            $this->db->where('id !=', $id);
+        }
+        $exists = $this->db->get(db_prefix() . 'tags')->row();
+        if ($exists) {
+            set_alert('warning', _l('tags_update_replace_warning'));
+            redirect(admin_url('siba_leads/tags'));
+        }
+
+        if ($id > 0) {
+            $this->db->where('id', $id);
+            $this->db->update(db_prefix() . 'tags', ['name' => $name]);
+            if (function_exists('siba_leads_clear_tags_cache')) {
+                siba_leads_clear_tags_cache();
+            }
+            set_alert('success', _l('updated_successfully', _l('siba_leads_tag')));
+        } else {
+            $this->db->insert(db_prefix() . 'tags', ['name' => $name]);
+            $newId = (int) $this->db->insert_id();
+            if ($newId > 0) {
+                hooks()->do_action('new_tag_created', $newId);
+            }
+            if (function_exists('siba_leads_clear_tags_cache')) {
+                siba_leads_clear_tags_cache();
+            }
+            set_alert('success', _l('added_successfully', _l('siba_leads_tag')));
+        }
+
+        redirect(admin_url('siba_leads/tags'));
+    }
+
+    public function tag_delete($id = '')
+    {
+        if (!is_admin()) {
+            access_denied(SIBA_LEADS_MODULE_NAME);
+        }
+
+        $id = (int) $id;
+        if ($id < 1) {
+            redirect(admin_url('siba_leads/tags'));
+        }
+
+        $this->db->where('id', $id);
+        $this->db->delete(db_prefix() . 'tags');
+        $this->db->where('tag_id', $id);
+        $this->db->delete(db_prefix() . 'taggables');
+        if (function_exists('siba_leads_clear_tags_cache')) {
+            siba_leads_clear_tags_cache();
+        }
+
+        set_alert('success', _l('deleted', _l('siba_leads_tag')));
+        redirect(admin_url('siba_leads/tags'));
+    }
+
+    /**
      * Didar CRM → Siba Leads migration settings and actions.
      */
     public function didar()
@@ -858,6 +1137,12 @@ class Siba_leads extends AdminController
             return;
         }
 
+        if ($action === 'preview') {
+            $this->respond_didar_preview();
+
+            return;
+        }
+
         if ($action === 'sync_staff') {
             $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
             $users = $this->didar_client->list_users();
@@ -947,6 +1232,74 @@ class Siba_leads extends AdminController
         }
 
         show_404();
+    }
+
+    protected function respond_didar_preview()
+    {
+        try {
+            $this->load->library('siba_leads/Siba_leads_didar_client', [], 'didar_client');
+            siba_leads_didar_ensure_mapping_tables();
+
+            $scoped = array_fill_keys(siba_leads_didar_scoped_pipeline_ids(), true);
+            $all    = $this->didar_client->list_deal_pipelines();
+            $rows   = [];
+            $log    = [];
+
+            foreach ($all as $pipeline) {
+                if (!is_array($pipeline)) {
+                    continue;
+                }
+                $id = trim((string) ($pipeline['Id'] ?? ''));
+                if ($id === '' || !isset($scoped[$id])) {
+                    continue;
+                }
+                $mapped = siba_leads_didar_upsert_pipeline_map($pipeline);
+                $pending = $this->didar_client->count_pending_deals($id);
+                $rows[] = [
+                    'id'      => $id,
+                    'title'   => (string) ($mapped['title'] ?? $pipeline['Title'] ?? $id),
+                    'tag'     => (string) ($mapped['tag_name'] ?? ''),
+                    'pending' => $pending,
+                ];
+                $log[] = siba_leads_didar_log_entry(
+                    'info',
+                    sprintf(
+                        _l('siba_leads_didar_log_pipeline_pending'),
+                        (string) ($mapped['title'] ?? $id),
+                        (string) $pending
+                    )
+                );
+            }
+
+            if ($rows === []) {
+                $this->output_didar_json([
+                    'ok'      => false,
+                    'message' => _l('siba_leads_didar_scoped_pipelines_missing'),
+                    'rows'    => [],
+                    'log'     => [
+                        siba_leads_didar_log_entry('error', _l('siba_leads_didar_scoped_pipelines_missing')),
+                    ],
+                ]);
+
+                return;
+            }
+
+            $this->output_didar_json([
+                'ok'      => true,
+                'message' => _l('siba_leads_didar_preview_done'),
+                'rows'    => $rows,
+                'log'     => $log,
+            ]);
+        } catch (Throwable $e) {
+            $this->output_didar_json([
+                'ok'      => false,
+                'message' => $e->getMessage(),
+                'rows'    => [],
+                'log'     => [
+                    siba_leads_didar_log_entry('error', $e->getMessage()),
+                ],
+            ]);
+        }
     }
 
     protected function respond_didar_migrate_batch()

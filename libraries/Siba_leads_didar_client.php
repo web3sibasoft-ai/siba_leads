@@ -128,6 +128,17 @@ class Siba_leads_didar_client
      */
     public function search_deals(array $criteria, int $from = 0, int $limit = 100): array
     {
+        $page = $this->search_deals_page($criteria, $from, $limit);
+
+        return $page['list'];
+    }
+
+    /**
+     * @param array<string,mixed> $criteria
+     * @return array{list:array<int,array<string,mixed>>,total:int,ok:bool,message:string}
+     */
+    public function search_deals_page(array $criteria, int $from = 0, int $limit = 100): array
+    {
         $body = [
             'Criteria' => $criteria,
             'From'     => $from,
@@ -136,11 +147,82 @@ class Siba_leads_didar_client
 
         $result = $this->post('/api/deal/search_v2', $body);
         if (!$result['ok']) {
+            return [
+                'list'    => [],
+                'total'   => 0,
+                'ok'      => false,
+                'message' => (string) ($result['message'] ?? ''),
+            ];
+        }
+
+        $response = $result['data']['Response'] ?? [];
+        $list     = $response['List'] ?? [];
+        $total    = (int) ($response['Total'] ?? $response['Count'] ?? 0);
+        if ($total < 1 && is_array($list)) {
+            $total = count($list);
+        }
+
+        return [
+            'list'    => is_array($list) ? $list : [],
+            'total'   => $total,
+            'ok'      => true,
+            'message' => '',
+        ];
+    }
+
+    /**
+     * Count Pending deals in a pipeline (Limit=1 for a cheap total when API returns Total).
+     */
+    public function count_pending_deals(string $pipelineId): int
+    {
+        $pipelineId = trim($pipelineId);
+        if ($pipelineId === '') {
+            return 0;
+        }
+        $page = $this->search_deals_page([
+            'Status'     => 'Pending',
+            'PipelineId' => $pipelineId,
+        ], 0, 1);
+
+        return (int) ($page['total'] ?? 0);
+    }
+
+    /**
+     * @param array<string,mixed>|null $isDone null = all, true/false filter
+     * @return array<int,array<string,mixed>>
+     */
+    public function search_deal_activities_filtered(
+        string $dealId,
+        int $from = 0,
+        int $limit = 200,
+        $isDone = null
+    ): array {
+        $dealId = trim($dealId);
+        if ($dealId === '') {
+            return [];
+        }
+
+        $body = [
+            'FromDate'  => '1800-01-01T00:00:00.000Z',
+            'ToDate'    => '9999-12-31T23:59:59.000Z',
+            'SortType'  => 1,
+            'From'      => $from,
+            'Limit'     => $limit,
+            'DealId'    => $dealId,
+            'IsDeleted' => false,
+        ];
+        if ($isDone !== null) {
+            $body['IsDone'] = (bool) $isDone;
+        }
+
+        $result = $this->post('/api/activity/search', $body);
+        if (!$result['ok']) {
             return [];
         }
 
         $response = $result['data']['Response'] ?? [];
         $list     = $response['List'] ?? [];
+
         return is_array($list) ? $list : [];
     }
 

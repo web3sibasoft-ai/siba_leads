@@ -54,6 +54,9 @@ if (get_option('siba_leads_didar_import_source_id') === false) {
 if (get_option('siba_leads_didar_ssl_verify') === false || get_option('siba_leads_didar_ssl_verify') === '') {
     add_option('siba_leads_didar_ssl_verify', '1');
 }
+if (get_option('siba_leads_didar_sync_lock') === false) {
+    add_option('siba_leads_didar_sync_lock', '');
+}
 
 // Temporary Didar user id on staff (UUID) — reinstall-safe
 if ($CI->db->table_exists(db_prefix() . 'staff')
@@ -73,6 +76,9 @@ if (!$CI->db->table_exists(db_prefix() . 'siba_leads_failure_reasons')) {
 }
 
 $CI->load->helper('siba_leads/siba_leads');
+if (function_exists('siba_leads_didar_ensure_mapping_tables')) {
+    siba_leads_didar_ensure_mapping_tables();
+}
 if (function_exists('siba_leads_ensure_lead_columns')) {
     siba_leads_ensure_lead_columns();
 }

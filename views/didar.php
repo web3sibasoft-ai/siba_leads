@@ -29,6 +29,7 @@
                             ['data-none-selected-text' => _l('siba_leads_didar_pipeline_auto')]
                         );
                         ?>
+                        <p class="text-muted tw-text-sm"><?= _l('siba_leads_didar_pipeline_help'); ?></p>
                         <div class="checkbox checkbox-primary">
                             <input type="checkbox"
                                 name="didar_ssl_verify"
@@ -82,6 +83,30 @@
                         <button type="button" class="btn btn-danger" id="siba-didar-wipe">
                             <?= _l('siba_leads_didar_wipe_button'); ?>
                         </button>
+                    </div>
+                </div>
+
+                <div class="panel_s">
+                    <div class="panel-body">
+                        <h5 class="tw-font-semibold"><?= _l('siba_leads_didar_pipelines_panel'); ?></h5>
+                        <p class="text-muted"><?= _l('siba_leads_didar_pipeline_help'); ?></p>
+                        <button type="button" class="btn btn-default" id="siba-didar-preview">
+                            <?= _l('siba_leads_didar_preview_button'); ?>
+                        </button>
+                        <div class="table-responsive tw-mt-3">
+                            <table class="table table-striped" id="siba-didar-preview-table">
+                                <thead>
+                                    <tr>
+                                        <th><?= _l('siba_leads_didar_col_pipeline'); ?></th>
+                                        <th><?= _l('siba_leads_didar_col_tag'); ?></th>
+                                        <th><?= _l('siba_leads_didar_col_pending'); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td colspan="3" class="text-muted">—</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -179,10 +204,28 @@
         }
         return <?= json_encode(_l('siba_leads_didar_log_stats_prefix')); ?>
             + (stats.leads || 0) + ' · '
+            + (stats.updated || 0) + ' · '
             + (stats.tasks || 0) + ' · '
             + (stats.reports || 0) + ' · '
+            + (stats.reminders || 0) + ' · '
             + (stats.skipped || 0) + ' · '
+            + (stats.unmapped || 0) + ' · '
             + (stats.errors || 0);
+    }
+
+    function renderPreviewRows(rows) {
+        var tbody = document.querySelector('#siba-didar-preview-table tbody');
+        if (!tbody) {
+            return;
+        }
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-muted">—</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function (row) {
+            return '<tr><td>' + (row.title || row.id || '') + '</td><td>'
+                + (row.tag || '') + '</td><td>' + (row.pending || 0) + '</td></tr>';
+        }).join('');
     }
 
     function runMigrateBatch(offset) {
@@ -232,6 +275,18 @@
             runMigrateBatch(0);
         });
     }
+
+    $('#siba-didar-preview').on('click', function () {
+        var $btn = $(this).prop('disabled', true);
+        logEl.innerHTML = '';
+        showLogPanel();
+        postJson({ didar_ajax_action: 'preview' }, function (resp) {
+            $btn.prop('disabled', false);
+            appendLogLines(resp.log || []);
+            renderPreviewRows(resp.rows || []);
+            appendLogLines([{ level: resp.ok ? 'success' : 'error', time: '', message: resp.message || '' }]);
+        });
+    });
 
     $('#siba-didar-test').on('click', function () {
         var $btn = $(this).prop('disabled', true);

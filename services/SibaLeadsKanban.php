@@ -90,9 +90,9 @@ class SibaLeadsKanban extends LeadsKanban
         $formMetaSelect = $this->buildFormMetaSelect($leads);
 
         // Lean card SELECT: no per-row files/notes/tags/order/client correlated subqueries.
-        // Those are batch-annotated in get(). Description/website/zip/country load on expand.
+        // City/state text + description/website load on expand; address/ids stay for order readiness.
         $select = $leads . '.title, ' . $leads . '.lead_value, ' . $leads . '.address, '
-            . $leads . '.city, ' . $leads . '.state, ' . $leads . '.province_id, ' . $leads . '.city_id, '
+            . $leads . '.province_id, ' . $leads . '.city_id, '
             . $leads . '.name as lead_name,'
             . $prefix . 'leads_sources.name as source_name,'
             . $leads . '.id as id,'
@@ -161,6 +161,9 @@ class SibaLeadsKanban extends LeadsKanban
             'job_group_id',
             'position_id',
         ];
+        if (function_exists('siba_leads_attribution_columns')) {
+            $formMetaColumns = array_merge($formMetaColumns, siba_leads_attribution_columns());
+        }
         foreach ($formMetaColumns as $column) {
             if ($this->fieldExistsCached($column, $leadsTable)) {
                 $formMetaSelect .= ',' . $leadsTable . '.' . $column;

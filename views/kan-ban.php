@@ -1,22 +1,16 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed');
-$is_admin = is_admin();
+/**
+ * Lightweight column shells only — cards load in parallel via kanban_column.
+ */
+$is_admin   = is_admin();
+$can_create = function_exists('siba_leads_can_create')
+    ? siba_leads_can_create()
+    : ($is_admin || staff_can('create', 'siba_leads'));
 foreach ($statuses as $status) {
     // Converted/default Customer column is no longer shown — succeeded leads leave the board.
     if (!empty($status['isdefault'])) {
         continue;
     }
-
-    $kanBan = siba_leads_kanban_for_status($status['id']);
-    $searchQ = $this->input->get('search');
-    $kanBan->search($searchQ)
-        ->sortBy($this->input->get('sort_by'), $this->input->get('sort'));
-
-    if ($this->input->get('refresh')) {
-        $kanBan->refresh($this->input->get('refresh')[$status['id']] ?? null);
-    }
-
-    $leads       = $kanBan->get();
-    $total_leads = count($leads);
 
     $settings = '';
     foreach (get_system_favourite_colors() as $color) {
@@ -25,23 +19,24 @@ foreach ($statuses as $status) {
     }
 
     $statusSummaryIndex = array_search($status['id'], array_column($summary, 'id'));
-    // Prefer summary totals for pagination (avoids a second heavy COUNT per column).
-    // When searching, summary is unfiltered — fall back to a lightweight countAll().
-    $limit = max(1, (int) $kanBan->limit());
-    if ($searchQ !== null && $searchQ !== '') {
-        $total_pages = $kanBan->totalPages();
-    } else {
-        $statusTotal = (int) ($summary[$statusSummaryIndex]['total'] ?? 0);
-        $total_pages = $statusTotal > 0 ? (int) ceil($statusTotal / $limit) : 0;
-    }
+    $statusTotal        = (int) ($summary[$statusSummaryIndex]['total'] ?? 0);
+    $limit              = max(1, (int) get_option('leads_kanban_limit'));
+    $total_pages        = $statusTotal > 0 ? (int) ceil($statusTotal / $limit) : 0;
     $status_color       = !empty($status['color'])
         ? 'style="background:' . $status['color'] . ';border:1px solid ' . $status['color'] . '"'
         : '';
     $is_backlog = function_exists('siba_leads_is_backlog_status') && siba_leads_is_backlog_status($status['id']);
+    $refreshTotal = null;
+    if ($this->input->get('refresh')) {
+        $refreshTotal = $this->input->get('refresh')[$status['id']] ?? null;
+    }
     ?>
-<ul class="kan-ban-col<?= $is_backlog ? ' siba-backlog-col' : ''; ?>" data-col-status-id="<?= e($status['id']); ?>"
+<ul class="kan-ban-col<?= $is_backlog ? ' siba-backlog-col' : ''; ?>"
+    data-col-status-id="<?= e($status['id']); ?>"
     data-total-pages="<?= e($total_pages); ?>"
-    data-total="<?= e($total_leads); ?>"
+    data-total="0"
+    data-siba-loaded="0"
+    <?= $refreshTotal !== null && $refreshTotal !== '' ? 'data-siba-refresh="' . e($refreshTotal) . '"' : ''; ?>
     <?= $is_backlog ? 'data-siba-backlog="1"' : ''; ?>>
     <li class="kan-ban-col-wrapper">
         <div class="border-right panel_s">
@@ -70,48 +65,48 @@ foreach ($statuses as $status) {
                     $base_currency
                 ); ?>
                 -
-                <small><?= ($summary[$statusSummaryIndex]['total'] ?? 0) . ' ' . _l('leads'); ?></small>
+                <small><?= $statusTotal . ' ' . _l('leads'); ?></small>
+                <?php if ($can_create || $is_admin) { ?>
                 <a href="#" onclick="return false;"
                     class="pull-right color-white kanban-color-picker kanban-stage-color-picker<?= $status['isdefault'] == 1 ? ' kanban-stage-color-picker-last' : ''; ?>"
                     data-placement="bottom" data-toggle="popover" data-html="true" data-trigger="focus"
                     data-content="
+                        <?php if ($can_create) { ?>
                         <div class='text-center'>
                           <button type='button' class='btn btn-primary btn-block mtop10 new-lead-from-status'>
                             <?= _l('new_lead'); ?>
                           </button>
                         </div>
+                        <?php } ?>
                         <?php if ($is_admin) { ?>
-                        <hr />
+                        <?php if ($can_create) { ?><hr /><?php } ?>
                         <div class='kan-ban-settings cpicker-wrapper'>
                           <?= $settings; ?>
                         </div>
                         <?php } ?>">
                     <i class="fa fa-angle-down"></i>
                 </a>
+                <?php } ?>
             </div>
             <div class="kan-ban-content-wrapper">
                 <div class="kan-ban-content">
                     <ul class="status leads-status sortable"
                         data-lead-status-id="<?= e($status['id']); ?>">
-                        <?php foreach ($leads as $lead) {
-                            $this->load->view('siba_leads/_kan_ban_card', [
-                                'lead'          => $lead,
-                                'status'        => $status,
-                                'base_currency' => $base_currency,
-                            ]);
-                        } ?>
-                        <?php if ($total_leads > 0) { ?>
-                        <li class="text-center not-sortable kanban-load-more"
+                        <li class="text-center not-sortable siba-kanban-skeleton" aria-hidden="true">
+                            <div class="siba-kanban-skeleton__card"></div>
+                            <div class="siba-kanban-skeleton__card"></div>
+                            <div class="siba-kanban-skeleton__card"></div>
+                        </li>
+                        <li class="text-center not-sortable kanban-load-more hide"
                             data-load-status="<?= e($status['id']); ?>">
                             <a href="#"
-                                class="btn btn-default btn-block<?= ($total_pages <= 1 || $kanBan->getPage() === $total_pages) ? ' disabled' : ''; ?>"
-                                data-page="<?= e($kanBan->getPage()); ?>"
+                                class="btn btn-default btn-block<?= $total_pages <= 1 ? ' disabled' : ''; ?>"
+                                data-page="1"
                                 onclick="kanban_load_more(<?= e($status['id']); ?>, this, 'siba_leads/kanban_load_more', 315, 360); return false;">
                                 <?= _l('load_more'); ?>
                             </a>
                         </li>
-                        <?php } ?>
-                        <li class="text-center not-sortable mtop30 kanban-empty<?= $total_leads > 0 ? ' hide' : ''; ?>">
+                        <li class="text-center not-sortable mtop30 kanban-empty hide">
                             <h4>
                                 <i class="fa-solid fa-circle-notch" aria-hidden="true"></i><br /><br />
                                 <?= _l('no_leads_found'); ?>

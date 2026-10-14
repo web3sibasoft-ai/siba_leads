@@ -39,14 +39,19 @@ echo "=== Siba Leads Kanban — static operation wiring ===" . PHP_EOL;
 
 // Toolbar
 check('New lead button', file_has($manage, 'init_lead();'));
+check('New lead gated by siba_leads create', file_has($manage, 'siba_leads_can_create') || file_has($manage, "staff_can('create', 'siba_leads')"));
+check('Kanban new lead gated by create', file_has($kanban, 'siba_leads_can_create') || file_has($kanban, "staff_can('create', 'siba_leads')"));
 check('Kanban/list switch control', file_has($manage, "admin_url('siba_leads/switch_kanban/"));
 check('Import toolbar button removed', !file_has($manage, "admin_url('siba_leads/import')"));
 check('Core leads list toolbar button removed', !file_has($manage, "admin_url('leads')"));
 check('List DataTable endpoint', file_has($manage, "admin_url + 'siba_leads/table'"));
 check('Teams link (admin)', file_has($manage, "admin_url('siba_leads/teams')"));
-check('Search input refreshes board', file_has($manage, 'siba_leads_kanban();'));
+check('Search input refreshes board', file_has($manage, 'siba_leads_kanban_search();') || file_has($manage, 'siba_leads_kanban();'));
 check('Controller switch_kanban()', file_has($ctrl, 'function switch_kanban'));
 check('Controller table()', file_has($ctrl, 'function table()'));
+check('Parallel column endpoint', file_has($ctrl, 'function kanban_column') && file_has($js, 'kanban_column'));
+check('Safe move rollback', file_has($js, 'siba_leads_revert_card_move'));
+check('Card sortable init', file_has($js, 'siba_leads_init_card_sortable'));
 
 // Sort
 check('Sort by dateadded', file_has($manage, "siba_leads_kanban_sort('dateadded')"));

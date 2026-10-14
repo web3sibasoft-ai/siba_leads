@@ -95,6 +95,44 @@ function siba_leads_can_view_all(): bool
 }
 
 /**
+ * Can the current staff create / generate new leads?
+ */
+function siba_leads_can_create(): bool
+{
+    return is_admin() || staff_can('create', SIBA_LEADS_MODULE_NAME);
+}
+
+/**
+ * Block admin create-lead requests when staff lacks siba_leads → create.
+ * Covers empty modal load (GET) and create submit (POST) on leads/lead.
+ */
+function siba_leads_guard_create_permission()
+{
+    $CI = &get_instance();
+    $uri = (string) $CI->uri->uri_string();
+    $requestUri = (string) ($CI->input->server('REQUEST_URI') ?: '');
+    $path = $uri . ' ' . $requestUri;
+
+    // Match admin/leads/lead with no numeric id (create flow only).
+    if (!preg_match('#(?:^|/)leads/lead(?:/?|\?|$)#', $path)) {
+        return;
+    }
+    if (preg_match('#(?:^|/)leads/lead/\d+#', $path)) {
+        return;
+    }
+
+    if (siba_leads_can_create()) {
+        return;
+    }
+
+    if ($CI->input->is_ajax_request()) {
+        ajax_access_denied();
+    }
+
+    access_denied(SIBA_LEADS_MODULE_NAME);
+}
+
+/**
  * Can the current staff open/manage the Teams settings page?
  */
 function siba_leads_can_manage_teams(): bool
@@ -191,7 +229,93 @@ function siba_leads_kanban_for_status($statusId): \modules\siba_leads\services\S
 }
 
 /**
+ * Active Didar pipeline board id from session (falls back to first mapped pipeline).
+ */
+function siba_leads_active_pipeline_id(): string
+{
+    if (!function_exists('siba_leads_didar_list_pipeline_maps')) {
+        return '';
+    }
+
+    $CI         = &get_instance();
+    $pipelines  = siba_leads_didar_list_pipeline_maps();
+    if ($pipelines === []) {
+        return '';
+    }
+
+    $active = trim((string) $CI->session->userdata('siba_leads_active_pipeline_id'));
+    if ($active !== '') {
+        foreach ($pipelines as $row) {
+            if (trim((string) ($row['didar_pipeline_id'] ?? '')) === $active) {
+                return $active;
+            }
+        }
+    }
+
+    return trim((string) ($pipelines[0]['didar_pipeline_id'] ?? ''));
+}
+
+/**
+ * @return array<string,mixed>|null
+ */
+function siba_leads_active_pipeline_map(): ?array
+{
+    $active = siba_leads_active_pipeline_id();
+    if ($active === '' || !function_exists('siba_leads_didar_list_pipeline_maps')) {
+        return null;
+    }
+    foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+        if (trim((string) ($row['didar_pipeline_id'] ?? '')) === $active) {
+            return $row;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Lead statuses (columns) for the active pipeline board.
+ * Falls back to all lead statuses when no Didar stage map exists yet.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function siba_leads_kanban_statuses(): array
+{
+    $CI = &get_instance();
+    if (!class_exists('leads_model', false)) {
+        $CI->load->model('leads_model');
+    }
+
+    $pipelineId = siba_leads_active_pipeline_id();
+    $statusIds  = ($pipelineId !== '' && function_exists('siba_leads_didar_get_pipeline_status_ids'))
+        ? siba_leads_didar_get_pipeline_status_ids($pipelineId)
+        : [];
+
+    if ($statusIds === []) {
+        return $CI->leads_model->get_status();
+    }
+
+    $byId = [];
+    foreach ($CI->leads_model->get_status() as $status) {
+        $sid = (int) ($status['id'] ?? 0);
+        if ($sid > 0) {
+            $byId[$sid] = $status;
+        }
+    }
+
+    $ordered = [];
+    foreach ($statusIds as $sid) {
+        if (isset($byId[$sid]) && empty($byId[$sid]['isdefault'])) {
+            $ordered[] = $byId[$sid];
+        }
+    }
+
+    return $ordered !== [] ? $ordered : $CI->leads_model->get_status();
+}
+
+/**
  * Status summary totals/values, respecting Siba view_all permission.
+ * Scoped to the active pipeline board when Didar stages are mapped.
  */
 function siba_leads_get_summary(): array
 {
@@ -205,7 +329,9 @@ function siba_leads_get_summary(): array
         $CI->load->model('leads_model');
     }
 
-    $statuses   = $CI->leads_model->get_status();
+    $statuses   = function_exists('siba_leads_kanban_statuses')
+        ? siba_leads_kanban_statuses()
+        : $CI->leads_model->get_status();
     $canViewAll = siba_leads_can_view_all();
     $staffId    = (int) get_staff_user_id();
     $sql        = '';
@@ -818,9 +944,27 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
 
     $idList = implode(',', $ids);
 
+    // Request-scoped schema cache — avoid repeated information_schema hits per column load.
+    static $schemaCache = [];
+    $tableOk = static function (string $table) use ($CI, &$schemaCache): bool {
+        if (!array_key_exists($table, $schemaCache)) {
+            $schemaCache[$table] = (bool) $CI->db->table_exists($table);
+        }
+
+        return $schemaCache[$table];
+    };
+    $fieldOk = static function (string $field, string $table) use ($CI, &$schemaCache): bool {
+        $key = $table . '.' . $field;
+        if (!array_key_exists($key, $schemaCache)) {
+            $schemaCache[$key] = (bool) $CI->db->field_exists($field, $table);
+        }
+
+        return $schemaCache[$key];
+    };
+
     // Formal client conversion
     $clientByLead = [];
-    if ($CI->db->table_exists($prefix . 'clients')) {
+    if ($tableOk($prefix . 'clients')) {
         $rows = $CI->db->query(
             'SELECT leadid, userid FROM ' . $prefix . 'clients WHERE leadid IN (' . $idList . ')'
         )->result_array();
@@ -835,7 +979,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
     // Files / notes counts
     $filesByLead = [];
     $notesByLead = [];
-    if ($CI->db->table_exists($prefix . 'files')) {
+    if ($tableOk($prefix . 'files')) {
         $rows = $CI->db->query(
             'SELECT rel_id, COUNT(id) AS total FROM ' . $prefix . 'files'
             . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ') GROUP BY rel_id'
@@ -844,7 +988,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
             $filesByLead[(int) $row['rel_id']] = (int) $row['total'];
         }
     }
-    if ($CI->db->table_exists($prefix . 'notes')) {
+    if ($tableOk($prefix . 'notes')) {
         $rows = $CI->db->query(
             'SELECT rel_id, COUNT(id) AS total FROM ' . $prefix . 'notes'
             . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ') GROUP BY rel_id'
@@ -856,7 +1000,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
 
     // Tags
     $tagsByLead = [];
-    if ($CI->db->table_exists($prefix . 'taggables') && $CI->db->table_exists($prefix . 'tags')) {
+    if ($tableOk($prefix . 'taggables') && $tableOk($prefix . 'tags')) {
         $rows = $CI->db->query(
             'SELECT tg.rel_id, GROUP_CONCAT(t.name ORDER BY tg.tag_order ASC SEPARATOR ",") AS tags'
             . ' FROM ' . $prefix . 'taggables tg'
@@ -872,7 +1016,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
     // My active tasks
     $tasksByLead = [];
     $staffId = (int) get_staff_user_id();
-    if ($staffId > 0 && $CI->db->table_exists($prefix . 'tasks') && $CI->db->table_exists($prefix . 'task_assigned')) {
+    if ($staffId > 0 && $tableOk($prefix . 'tasks') && $tableOk($prefix . 'task_assigned')) {
         $rows = $CI->db->query(
             'SELECT t.rel_id, COUNT(t.id) AS total'
             . ' FROM ' . $prefix . 'tasks t'
@@ -891,10 +1035,10 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
     $activeByLead   = [];
     $anyOrderByLead = [];
     $ordersTable    = $prefix . 'siba_orders';
-    if ($CI->db->table_exists($ordersTable)) {
-        $hasPaid     = $CI->db->field_exists('order_paid', $ordersTable);
-        $hasExpired  = $CI->db->field_exists('order_factor_expired', $ordersTable);
-        $hasPendingI = $CI->db->field_exists('order_pending_invoice', $ordersTable);
+    if ($tableOk($ordersTable)) {
+        $hasPaid     = $fieldOk('order_paid', $ordersTable);
+        $hasExpired  = $fieldOk('order_factor_expired', $ordersTable);
+        $hasPendingI = $fieldOk('order_pending_invoice', $ordersTable);
 
         $selectExtra = '';
         if ($hasPaid) {
@@ -907,14 +1051,17 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
             $selectExtra .= ', order_pending_invoice';
         }
 
+        $clientIds = array_values(array_filter(array_map('intval', $clientByLead)));
+        $orderWhere = 'order_lead_id IN (' . $idList . ')';
+        if ($clientIds !== []) {
+            $orderWhere .= ' OR (order_customer > 0 AND order_customer IN (' . implode(',', $clientIds) . '))';
+        }
+
         $orderRows = $CI->db->query(
             'SELECT order_id, order_lead_id, order_customer, order_invoice_id, order_financial_approval'
             . $selectExtra
             . ' FROM ' . $ordersTable
-            . ' WHERE order_lead_id IN (' . $idList . ')'
-            . ' OR (order_customer > 0 AND order_customer IN ('
-            . 'SELECT userid FROM ' . $prefix . 'clients WHERE leadid IN (' . $idList . ')'
-            . '))'
+            . ' WHERE ' . $orderWhere
             . ' ORDER BY order_id DESC'
         )->result_array();
 
@@ -959,7 +1106,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
         }
     }
     $invoiceIds = array_values(array_unique($invoiceIds));
-    if ($invoiceIds !== [] && $CI->db->table_exists($prefix . 'invoices')) {
+    if ($invoiceIds !== [] && $tableOk($prefix . 'invoices')) {
         $rows = $CI->db->query(
             'SELECT id, status, hash FROM ' . $prefix . 'invoices WHERE id IN (' . implode(',', $invoiceIds) . ')'
         )->result_array();
@@ -981,7 +1128,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
     }
     $activeOrderIds = array_values(array_unique($activeOrderIds));
     $finTable = $prefix . 'siba_fin_approve_req';
-    if ($activeOrderIds !== [] && $CI->db->table_exists($finTable)) {
+    if ($activeOrderIds !== [] && $tableOk($finTable)) {
         $rows = $CI->db->query(
             'SELECT fin_approve_order FROM ' . $finTable
             . ' WHERE fin_approve_order IN (' . implode(',', $activeOrderIds) . ')'
@@ -1394,5 +1541,215 @@ function siba_leads_lead_modal_order_tab($lead = null): void
         echo '</a>';
     }
     echo '</li>';
+}
+
+/**
+ * Clear request-scoped Perfex tags cache after CRUD.
+ */
+function siba_leads_clear_tags_cache(): void
+{
+    $CI = &get_instance();
+    if (isset($CI->app_object_cache) && method_exists($CI->app_object_cache, 'delete')) {
+        $CI->app_object_cache->delete('db-tags-array');
+    }
+}
+
+/**
+ * Keep only tags that already exist in tbltags (no auto-create).
+ * Returns the same type as input when possible (array or comma string).
+ *
+ * @param mixed $tags
+ * @return mixed
+ */
+function siba_leads_restrict_tags_to_existing($tags)
+{
+    if ($tags === null || $tags === '' || $tags === false) {
+        return $tags;
+    }
+
+    $returnArray = is_array($tags);
+    if (!$returnArray) {
+        $tags = explode(',', (string) $tags);
+    }
+
+    $existing = function_exists('get_tags_clean') ? get_tags_clean() : [];
+    if (!is_array($existing) || $existing === []) {
+        return $returnArray ? [] : '';
+    }
+
+    $map = [];
+    foreach ($existing as $name) {
+        $name = trim((string) $name);
+        if ($name === '') {
+            continue;
+        }
+        $map[function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name)] = $name;
+    }
+
+    $out = [];
+    foreach ($tags as $tag) {
+        $tag = trim((string) $tag);
+        if ($tag === '') {
+            continue;
+        }
+        $key = function_exists('mb_strtolower') ? mb_strtolower($tag, 'UTF-8') : strtolower($tag);
+        if (isset($map[$key])) {
+            $out[$map[$key]] = $map[$key];
+        }
+    }
+
+    $out = array_values($out);
+
+    return $returnArray ? $out : implode(',', $out);
+}
+
+/**
+ * before_lead_added / email-integration: drop unknown tags so App_tags won't create them.
+ *
+ * @param mixed $data
+ * @return mixed
+ */
+function siba_leads_filter_lead_tags_no_autocreate($data)
+{
+    if (!is_array($data) || !array_key_exists('tags', $data)) {
+        return $data;
+    }
+    $data['tags'] = siba_leads_restrict_tags_to_existing($data['tags']);
+
+    return $data;
+}
+
+/**
+ * Sanitize lead POST tags on create/update (covers update path with no before_update filter).
+ */
+function siba_leads_intercept_lead_tags_post(): void
+{
+    $CI = &get_instance();
+    $class  = strtolower((string) $CI->router->fetch_class());
+    $method = strtolower((string) $CI->router->fetch_method());
+    if ($class !== 'leads' || $method !== 'lead') {
+        return;
+    }
+    if (!$CI->input->post()) {
+        return;
+    }
+    if (!array_key_exists('tags', $_POST)) {
+        return;
+    }
+    $_POST['tags'] = siba_leads_restrict_tags_to_existing($_POST['tags']);
+}
+
+/**
+ * Normalize raw tag filter input into positive integer IDs.
+ *
+ * @param mixed $raw
+ * @return int[]
+ */
+function siba_leads_normalize_tag_ids($raw): array
+{
+    if ($raw === null || $raw === '' || $raw === false) {
+        return [];
+    }
+    if (!is_array($raw)) {
+        $raw = preg_split('/\s*,\s*/', (string) $raw) ?: [];
+    }
+    $ids = [];
+    foreach ($raw as $value) {
+        $id = (int) $value;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+
+    return array_values($ids);
+}
+
+/**
+ * Apply lead tag filter to the active Query Builder.
+ *
+ * @param object $db CI_DB_query_builder
+ * @param string $leadIdColumn e.g. tblleads.id
+ * @param int[]  $tagIds
+ * @param bool   $tagNone only untagged leads
+ */
+function siba_leads_apply_tag_filter_where($db, string $leadIdColumn, array $tagIds = [], bool $tagNone = false): void
+{
+    $taggables = db_prefix() . 'taggables';
+    if ($tagNone) {
+        $db->where(
+            $leadIdColumn . ' NOT IN (SELECT rel_id FROM ' . $taggables . " WHERE rel_type = 'lead')",
+            null,
+            false
+        );
+
+        return;
+    }
+
+    $tagIds = siba_leads_normalize_tag_ids($tagIds);
+    if ($tagIds === []) {
+        return;
+    }
+
+    $db->where(
+        $leadIdColumn . ' IN (SELECT rel_id FROM ' . $taggables
+        . " WHERE rel_type = 'lead' AND tag_id IN (" . implode(',', array_map('intval', $tagIds)) . '))',
+        null,
+        false
+    );
+}
+
+/**
+ * Read tag filter from current request (GET or POST).
+ *
+ * @return array{tag_ids:int[], tag_none:bool}
+ */
+function siba_leads_request_tag_filter(): array
+{
+    $CI = &get_instance();
+    $rawTags = $CI->input->get_post('tags');
+    if ($rawTags === null || $rawTags === '') {
+        $rawTags = $CI->input->get_post('siba_leads_tags');
+    }
+    $tagNone = $CI->input->get_post('tag_none');
+    if ($tagNone === null || $tagNone === '') {
+        $tagNone = $CI->input->get_post('siba_leads_tag_none');
+    }
+
+    return [
+        'tag_ids'  => siba_leads_normalize_tag_ids($rawTags),
+        'tag_none' => ((string) $tagNone === '1' || (string) $tagNone === 'true'),
+    ];
+}
+
+/**
+ * Attach tag filter to a Siba kanban instance via tapQuery.
+ *
+ * @param \modules\siba_leads\services\SibaLeadsKanban $kanBan
+ * @return \modules\siba_leads\services\SibaLeadsKanban
+ */
+function siba_leads_kanban_apply_tag_filter($kanBan)
+{
+    $filter = siba_leads_request_tag_filter();
+    $tagIds = $filter['tag_ids'];
+    $tagNone = $filter['tag_none'];
+
+    // Active pipeline board: lock cards to that pipeline tag unless user overrides.
+    if (!$tagNone && $tagIds === []) {
+        $pipeline = siba_leads_active_pipeline_map();
+        $tagId    = (int) ($pipeline['tag_id'] ?? 0);
+        if ($tagId > 0) {
+            $tagIds = [$tagId];
+        }
+    }
+
+    if (!$tagNone && $tagIds === []) {
+        return $kanBan;
+    }
+
+    $leadCol = db_prefix() . 'leads.id';
+
+    return $kanBan->tapQuery(static function ($status, $ci) use ($leadCol, $tagIds, $tagNone) {
+        siba_leads_apply_tag_filter_where($ci->db, $leadCol, $tagIds, $tagNone);
+    });
 }
 

@@ -76,25 +76,37 @@ $smsVerifiedExpand = function_exists('siba_leads_is_sms_verified')
 $trackingExpand = trim((string) ($lead['demo_request_tracking_id'] ?? ''));
 $packageExpand = trim((string) ($lead['user_package_number'] ?? ''));
 $requestExpand = trim((string) ($lead['request_type'] ?? ''));
+$attributionValues = [];
+if (function_exists('siba_leads_attribution_columns')) {
+    foreach (siba_leads_attribution_columns() as $attrCol) {
+        $attrVal = trim((string) ($lead[$attrCol] ?? ''));
+        if ($attrVal !== '') {
+            $attributionValues[$attrCol] = $attrVal;
+        }
+    }
+}
+$nativeForDedup = [
+    'form_identifier'          => $formId,
+    'form_source_link'         => $formLink,
+    'form_source_page_title'   => $formTitle,
+    'demo_request_tracking_id' => $trackingExpand,
+    'user_package_number'      => $packageExpand,
+    'request_type'             => $requestExpand,
+];
+$nativeForDedup = array_merge($nativeForDedup, $attributionValues);
 $descriptionMap = function_exists('siba_leads_parse_description_map')
     ? siba_leads_parse_description_map($lead['description'] ?? '')
     : [];
 $descriptionMap = function_exists('siba_leads_unique_form_detail_rows')
-    ? siba_leads_unique_form_detail_rows($descriptionMap, [
-        'form_identifier'          => $formId,
-        'form_source_link'         => $formLink,
-        'form_source_page_title'   => $formTitle,
-        'demo_request_tracking_id' => $trackingExpand,
-        'user_package_number'      => $packageExpand,
-        'request_type'             => $requestExpand,
-    ])
+    ? siba_leads_unique_form_detail_rows($descriptionMap, $nativeForDedup)
     : $descriptionMap;
 $leadMetaRows = function_exists('siba_leads_get_lead_meta')
     ? siba_leads_get_lead_meta((int) $lead['id'])
     : [];
 $hasWebsiteBlock = $formId !== '' || $formTitle !== '' || $formLink !== ''
     || $smsRawExpand !== '' || $trackingExpand !== '' || $packageExpand !== ''
-    || $requestExpand !== '' || $descriptionMap !== [] || $leadMetaRows !== [];
+    || $requestExpand !== '' || $attributionValues !== []
+    || $descriptionMap !== [] || $leadMetaRows !== [];
 if ($hasWebsiteBlock) { ?>
 <div class="siba-lead-card__form-block">
     <div class="siba-lead-card__form-title"><?= _l('siba_leads_website_form_info'); ?></div>
@@ -147,6 +159,12 @@ if ($hasWebsiteBlock) { ?>
         <dd><?= e($requestExpand); ?></dd>
     </div>
     <?php }
+    foreach ($attributionValues as $attrCol => $attrVal) { ?>
+    <div>
+        <dt><?= _l($attrCol); ?></dt>
+        <dd dir="ltr"><?= e($attrVal); ?></dd>
+    </div>
+    <?php }
     foreach ($descriptionMap as $metaKey => $metaVal) { ?>
     <div>
         <dt><?= e((string) $metaKey); ?></dt>
@@ -174,14 +192,7 @@ if ($hasWebsiteBlock) { ?>
             continue;
         }
         $filtered = function_exists('siba_leads_unique_form_detail_rows')
-            ? siba_leads_unique_form_detail_rows([$metaKey => $metaVal], [
-                'form_identifier'          => $formId,
-                'form_source_link'         => $formLink,
-                'form_source_page_title'   => $formTitle,
-                'demo_request_tracking_id' => $trackingExpand,
-                'user_package_number'      => $packageExpand,
-                'request_type'             => $requestExpand,
-            ])
+            ? siba_leads_unique_form_detail_rows([$metaKey => $metaVal], $nativeForDedup)
             : [$metaKey => $metaVal];
         if ($filtered === []) {
             continue;

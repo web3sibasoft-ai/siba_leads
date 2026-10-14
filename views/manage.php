@@ -19,7 +19,7 @@
                 <div class="_buttons tw-mb-3">
                     <div class="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
                         <div class="tw-flex tw-items-center tw-gap-2">
-                            <?php if (staff_can('create', 'leads') || is_admin()) { ?>
+                            <?php if (function_exists('siba_leads_can_create') ? siba_leads_can_create() : (is_admin() || staff_can('create', 'siba_leads'))) { ?>
                             <a href="#" onclick="init_lead(); return false;" class="btn btn-primary">
                                 <i class="fa-regular fa-plus"></i>
                                 <?= _l('new_lead'); ?>
@@ -45,6 +45,10 @@
                                 <i class="fa-solid fa-users"></i>
                                 <?= _l('siba_leads_teams'); ?>
                             </a>
+                            <a href="<?= admin_url('siba_leads/tags'); ?>" class="btn btn-default">
+                                <i class="fa-solid fa-tags"></i>
+                                <?= _l('siba_leads_tags'); ?>
+                            </a>
                             <?php } ?>
                         </div>
                         <?php if ($isKanBan) { ?>
@@ -53,12 +57,88 @@
                                 data-title="<?= _l('search_by_tags'); ?>">
                                 <?= render_input('search', '', '', 'search', [
                                     'data-name'   => 'search',
-                                    'onkeyup'     => 'siba_leads_kanban();',
+                                    'onkeyup'     => 'siba_leads_kanban_search();',
                                     'placeholder' => _l('leads_search'),
                                 ], [], 'no-margin'); ?>
                             </div>
                         </div>
                         <?php } ?>
+                    </div>
+                </div>
+
+                <div class="panel_s tw-mb-3">
+                    <div class="panel-body !tw-py-3">
+                        <div class="row">
+                            <?php
+                            $pipelines = isset($pipelines) && is_array($pipelines) ? $pipelines : [];
+                            $activePipelineId = isset($active_pipeline_id) ? (string) $active_pipeline_id : '';
+                            $activePipelineTagId = isset($active_pipeline_tag_id) ? (int) $active_pipeline_tag_id : 0;
+                            if ($pipelines !== []) { ?>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="siba_leads_pipeline_board" class="control-label">
+                                        <?= _l('siba_leads_pipeline_board'); ?>
+                                    </label>
+                                    <select id="siba_leads_pipeline_board"
+                                            class="selectpicker"
+                                            data-width="100%"
+                                            data-none-selected-text="<?= e(_l('siba_leads_pipeline_board_select')); ?>"
+                                            onchange="if (this.value) { window.location = '<?= admin_url('siba_leads/switch_pipeline/'); ?>' + encodeURIComponent(this.value); }">
+                                        <?php foreach ($pipelines as $pipeline) {
+                                            $pid = trim((string) ($pipeline['didar_pipeline_id'] ?? ''));
+                                            if ($pid === '') {
+                                                continue;
+                                            }
+                                            $label = trim((string) ($pipeline['title'] ?? $pipeline['tag_name'] ?? $pid));
+                                            ?>
+                                        <option value="<?= e($pid); ?>" <?= $pid === $activePipelineId ? 'selected' : ''; ?>>
+                                            <?= e($label); ?>
+                                        </option>
+                                        <?php } ?>
+                                    </select>
+                                    <p class="text-muted tw-text-sm tw-mb-0 tw-mt-1">
+                                        <?= _l('siba_leads_pipeline_board_help'); ?>
+                                    </p>
+                                </div>
+                            </div>
+                            <?php } ?>
+                            <div class="<?= $pipelines !== [] ? 'col-md-5' : 'col-md-5'; ?>">
+                                <?php
+                                $tagOptions = isset($tags) && is_array($tags) ? $tags : [];
+                                $selectedTags = $activePipelineTagId > 0 ? [$activePipelineTagId] : '';
+                                echo render_select(
+                                    'siba_leads_tags[]',
+                                    $tagOptions,
+                                    ['id', 'name'],
+                                    'siba_leads_filter_tags',
+                                    $selectedTags,
+                                    [
+                                        'multiple'              => true,
+                                        'data-actions-box'      => true,
+                                        'data-width'            => '100%',
+                                        'data-none-selected-text' => _l('siba_leads_filter_all_tags'),
+                                        'onchange'              => $isKanBan
+                                            ? 'siba_leads_kanban_filter_changed();'
+                                            : 'siba_leads_list_filter_changed();',
+                                    ],
+                                    [],
+                                    '',
+                                    '',
+                                    false
+                                );
+                                ?>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="checkbox checkbox-primary tw-mt-8">
+                                    <input type="checkbox"
+                                           id="siba_leads_tag_none"
+                                           name="siba_leads_tag_none"
+                                           value="1"
+                                           onchange="<?= $isKanBan ? 'siba_leads_kanban_filter_changed();' : 'siba_leads_list_filter_changed();'; ?>">
+                                    <label for="siba_leads_tag_none"><?= _l('siba_leads_filter_untagged'); ?></label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -137,6 +217,10 @@
                                     'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-source'],
                                 ],
                                 [
+                                    'name'     => _l('tags'),
+                                    'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-tags'],
+                                ],
+                                [
                                     'name'     => _l('leads_dt_last_contact'),
                                     'th_attrs' => ['class' => 'toggleable', 'id' => 'th-siba-last-contact'],
                                 ],
@@ -164,7 +248,11 @@ $(function () {
 <?php if ($isKanBan) { ?>
     siba_leads_kanban();
 <?php } else { ?>
-    initDataTable('.table-siba-leads', admin_url + 'siba_leads/table', undefined, undefined, undefined, [0, 'desc']);
+    var SibaLeadsServerParams = {};
+    SibaLeadsServerParams['siba_leads_tags'] = '[name="siba_leads_tags[]"]';
+    SibaLeadsServerParams['siba_leads_tag_none'] = '[name="siba_leads_tag_none"]:checked';
+    // Tags column (index 8) is not useful for search/sort — keep list snappy.
+    initDataTable('.table-siba-leads', admin_url + 'siba_leads/table', [8], [8], SibaLeadsServerParams, [0, 'desc']);
 <?php } ?>
 });
 </script>
