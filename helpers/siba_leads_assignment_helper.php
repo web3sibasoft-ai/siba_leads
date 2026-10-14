@@ -110,18 +110,100 @@ function siba_leads_next_assignment(array $current = []): array
 }
 
 /**
- * Fields to merge into lead insert/update payload.
+ * If this lead's phone matches an earlier lead, reuse that lead's assignee.
  *
- * @return array{assigned:int,status?:int}
+ * @param array $current Lead payload (needs phonenumber; optional id to exclude)
+ * @return array{assigned:int,status?:int,mode:string,main_lead_id:int}|null
+ */
+function siba_leads_assignment_from_duplicate_phone(array $current = []): ?array
+{
+    $phone = trim((string) ($current['phonenumber'] ?? ''));
+    if ($phone === '' || !function_exists('siba_leads_phone_duplicate_info')) {
+        return null;
+    }
+
+    $excludeId = (int) ($current['id'] ?? 0);
+    $info      = siba_leads_phone_duplicate_info($phone, $excludeId);
+    $mainId    = (int) ($info['existing_id'] ?? 0);
+    if (empty($info['is_duplicate']) || $mainId < 1) {
+        return null;
+    }
+
+    $CI = &get_instance();
+    $CI->db->select('id, assigned, status');
+    $CI->db->where('id', $mainId);
+    $main = $CI->db->get(db_prefix() . 'leads')->row();
+    if (!$main || (int) $main->assigned < 1) {
+        // Oldest sibling unassigned — try any older sibling with an assignee.
+        $siblings = $info['sibling_ids'] ?? [];
+        foreach ($siblings as $siblingId) {
+            $siblingId = (int) $siblingId;
+            if ($siblingId < 1 || $siblingId === $excludeId) {
+                continue;
+            }
+            $CI->db->select('id, assigned, status');
+            $CI->db->where('id', $siblingId);
+            $row = $CI->db->get(db_prefix() . 'leads')->row();
+            if ($row && (int) $row->assigned > 0) {
+                $main = $row;
+                $mainId = (int) $row->id;
+                break;
+            }
+        }
+    }
+
+    if (!$main || (int) $main->assigned < 1) {
+        return null;
+    }
+
+    $fields = [
+        'assigned'     => (int) $main->assigned,
+        'mode'         => 'duplicate',
+        'main_lead_id' => $mainId,
+    ];
+
+    // Same status lift as round-robin: leave backlog / empty status for default column.
+    $backlogId     = siba_leads_ensure_backlog_status();
+    $currentStatus = isset($current['status']) ? (int) $current['status'] : 0;
+    if ($currentStatus === $backlogId || $currentStatus === 0) {
+        $default = (int) get_option('leads_default_status');
+        if ($default > 0 && $default !== $backlogId) {
+            $fields['status'] = $default;
+        }
+    }
+
+    return $fields;
+}
+
+/**
+ * Fields to merge into lead insert/update payload.
+ * Duplicate phones inherit the main (oldest) lead's assignee before round-robin.
+ *
+ * @return array{assigned:int,status?:int,mode?:string,main_lead_id?:int}
  */
 function siba_leads_assignment_fields(array $current = []): array
 {
+    $dup = siba_leads_assignment_from_duplicate_phone($current);
+    if ($dup !== null) {
+        $fields = ['assigned' => (int) $dup['assigned']];
+        if (isset($dup['status'])) {
+            $fields['status'] = (int) $dup['status'];
+        }
+        $fields['mode']         = 'duplicate';
+        $fields['main_lead_id'] = (int) ($dup['main_lead_id'] ?? 0);
+        $GLOBALS['siba_leads_assignment_from_duplicate'] = $fields['main_lead_id'];
+
+        return $fields;
+    }
+
     $next   = siba_leads_next_assignment($current);
     $fields = ['assigned' => (int) $next['assigned']];
 
     if (isset($next['status'])) {
         $fields['status'] = (int) $next['status'];
     }
+
+    unset($GLOBALS['siba_leads_assignment_from_duplicate']);
 
     return $fields;
 }
@@ -147,26 +229,46 @@ function siba_leads_apply_assignment_to_lead(int $leadId, bool $notify = true): 
     }
 
     $fields = siba_leads_assignment_fields([
-        'status'   => $lead->status,
-        'assigned' => $lead->assigned,
+        'id'          => $leadId,
+        'status'      => $lead->status,
+        'assigned'    => $lead->assigned,
+        'phonenumber' => $lead->phonenumber ?? '',
     ]);
 
-    $update = $fields;
-    if (!empty($fields['assigned'])) {
+    // Only persist DB columns — strip helper metadata.
+    $update = [
+        'assigned' => (int) ($fields['assigned'] ?? 0),
+    ];
+    if (isset($fields['status'])) {
+        $update['status'] = (int) $fields['status'];
+    }
+    if (!empty($update['assigned'])) {
         $update['dateassigned'] = date('Y-m-d');
     }
 
     $CI->db->where(db_prefix() . 'leads.id', $leadId);
     $CI->db->update(db_prefix() . 'leads', $update);
 
-    if ($notify && !empty($fields['assigned'])) {
-        $CI->leads_model->lead_assigned_member_notification($leadId, $fields['assigned'], true);
-        $CI->leads_model->log_lead_activity(
-            $leadId,
-            'siba_leads_activity_auto_assigned',
-            true,
-            serialize([get_staff_full_name($fields['assigned'])])
-        );
+    $mainLeadId = (int) ($fields['main_lead_id'] ?? ($GLOBALS['siba_leads_assignment_from_duplicate'] ?? 0));
+    unset($GLOBALS['siba_leads_assignment_from_duplicate']);
+
+    if ($notify && !empty($update['assigned'])) {
+        $CI->leads_model->lead_assigned_member_notification($leadId, $update['assigned'], true);
+        if ($mainLeadId > 0) {
+            $CI->leads_model->log_lead_activity(
+                $leadId,
+                'siba_leads_activity_assigned_from_duplicate',
+                true,
+                serialize([get_staff_full_name($update['assigned']), $mainLeadId])
+            );
+        } else {
+            $CI->leads_model->log_lead_activity(
+                $leadId,
+                'siba_leads_activity_auto_assigned',
+                true,
+                serialize([get_staff_full_name($update['assigned'])])
+            );
+        }
     } else {
         $CI->leads_model->log_lead_activity($leadId, 'siba_leads_activity_sent_to_backlog', true);
     }
@@ -211,6 +313,19 @@ function siba_leads_filter_before_lead_added($data)
         return $data;
     }
 
+    // Duplicate phone → always inherit main lead's assignee (even if form set another).
+    $dup = siba_leads_assignment_from_duplicate_phone($data);
+    if ($dup !== null) {
+        $data['assigned'] = (int) $dup['assigned'];
+        if (isset($dup['status'])) {
+            $data['status'] = (int) $dup['status'];
+        }
+        $GLOBALS['siba_leads_assignment_applied']        = true;
+        $GLOBALS['siba_leads_assignment_from_duplicate'] = (int) ($dup['main_lead_id'] ?? 0);
+
+        return $data;
+    }
+
     if ((int) ($data['assigned'] ?? 0) > 0) {
         $GLOBALS['siba_leads_assignment_applied'] = true;
 
@@ -218,7 +333,8 @@ function siba_leads_filter_before_lead_added($data)
     }
 
     $fields = siba_leads_assignment_fields($data);
-    $data   = array_merge($data, $fields);
+    unset($fields['mode'], $fields['main_lead_id']);
+    $data = array_merge($data, $fields);
 
     $GLOBALS['siba_leads_assignment_applied'] = true;
 
@@ -235,7 +351,8 @@ function siba_leads_filter_before_email_lead($data)
     }
 
     $fields = siba_leads_assignment_fields($data);
-    $data   = array_merge($data, $fields);
+    unset($fields['mode'], $fields['main_lead_id']);
+    $data = array_merge($data, $fields);
     $GLOBALS['siba_leads_assignment_applied'] = true;
     $GLOBALS['siba_leads_from_email_filter']  = true;
 
@@ -277,7 +394,14 @@ function siba_leads_action_lead_created($payload)
             return;
         }
 
-        $GLOBALS['siba_leads_assignment_applied'] = false;
+        $leadId     = is_array($payload) ? (int) ($payload['lead_id'] ?? 0) : (int) $payload;
+        $mainLeadId = (int) ($GLOBALS['siba_leads_assignment_from_duplicate'] ?? 0);
+        unset($GLOBALS['siba_leads_assignment_applied'], $GLOBALS['siba_leads_assignment_from_duplicate']);
+
+        // before_lead_added already set assignee; log when inherited from a duplicate.
+        if ($leadId > 0 && $mainLeadId > 0) {
+            siba_leads_log_duplicate_assignment($leadId, $mainLeadId);
+        }
 
         return;
     }
@@ -287,6 +411,36 @@ function siba_leads_action_lead_created($payload)
     if ($leadId > 0) {
         siba_leads_apply_assignment_to_lead($leadId, true);
     }
+}
+
+/**
+ * Activity + notification when a new lead inherits the main duplicate's assignee.
+ */
+function siba_leads_log_duplicate_assignment(int $leadId, int $mainLeadId): void
+{
+    if ($leadId < 1 || $mainLeadId < 1) {
+        return;
+    }
+
+    $CI = &get_instance();
+    $CI->db->select('assigned');
+    $CI->db->where('id', $leadId);
+    $lead = $CI->db->get(db_prefix() . 'leads')->row();
+    $assigned = $lead ? (int) $lead->assigned : 0;
+    if ($assigned < 1) {
+        return;
+    }
+
+    if (!class_exists('leads_model', false)) {
+        $CI->load->model('leads_model');
+    }
+
+    $CI->leads_model->log_lead_activity(
+        $leadId,
+        'siba_leads_activity_assigned_from_duplicate',
+        true,
+        serialize([get_staff_full_name($assigned), $mainLeadId])
+    );
 }
 
 /**
@@ -321,7 +475,9 @@ function siba_leads_action_email_lead_created($leadId)
     }
 
     if (!empty($GLOBALS['siba_leads_assignment_applied'])) {
+        $mainLeadId = (int) ($GLOBALS['siba_leads_assignment_from_duplicate'] ?? 0);
         $GLOBALS['siba_leads_assignment_applied'] = false;
+        unset($GLOBALS['siba_leads_assignment_from_duplicate']);
 
         $CI = &get_instance();
         $CI->db->select('assigned');
@@ -332,6 +488,9 @@ function siba_leads_action_email_lead_created($leadId)
                 $CI->load->model('leads_model');
             }
             $CI->leads_model->lead_assigned_member_notification($leadId, (int) $lead->assigned, true);
+            if ($mainLeadId > 0) {
+                siba_leads_log_duplicate_assignment($leadId, $mainLeadId);
+            }
         }
 
         return;

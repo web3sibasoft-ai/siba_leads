@@ -229,6 +229,37 @@ function siba_leads_didar_upsert_stage_map(
 }
 
 /**
+ * Pipeline map whose stages include this Perfex status id.
+ *
+ * @return array<string,mixed>|null
+ */
+function siba_leads_didar_pipeline_map_for_status(int $statusId): ?array
+{
+    if ($statusId < 1) {
+        return null;
+    }
+
+    siba_leads_didar_ensure_mapping_tables();
+    $CI     = &get_instance();
+    $prefix = db_prefix();
+    $stages = $prefix . 'siba_leads_didar_stages';
+    $pipes  = $prefix . 'siba_leads_didar_pipelines';
+    if (!$CI->db->table_exists($stages) || !$CI->db->table_exists($pipes)) {
+        return null;
+    }
+
+    $row = $CI->db->select($pipes . '.*')
+        ->from($stages)
+        ->join($pipes, $pipes . '.didar_pipeline_id = ' . $stages . '.didar_pipeline_id', 'inner')
+        ->where($stages . '.status_id', $statusId)
+        ->limit(1)
+        ->get()
+        ->row_array();
+
+    return is_array($row) ? $row : null;
+}
+
+/**
  * Perfex status ids that belong to one Didar pipeline board (ordered).
  *
  * @return int[]

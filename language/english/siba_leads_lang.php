@@ -52,6 +52,7 @@ $lang['siba_leads_auto_assign_help'] = 'New leads (manual, CSV import, Siba API,
 $lang['siba_leads_auto_assign_no_sales'] = 'No active Sales members found — new leads go to the Backlog column until Sales org unit members are set.';
 $lang['siba_leads_auto_assign_sales_count'] = 'Active Sales members: %s';
 $lang['siba_leads_activity_auto_assigned'] = 'Auto-assigned to sales member %s';
+$lang['siba_leads_activity_assigned_from_duplicate'] = 'Assigned to %s (same responsible as duplicate lead #%s)';
 $lang['siba_leads_activity_sent_to_backlog'] = 'Moved to Backlog (no Sales team members available)';
 $lang['siba_leads_import_desc'] = 'Import leads from CSV. Status/source fallbacks apply when a row value is missing. Sales auto-assign still runs after a real (non-simulate) import.';
 $lang['siba_leads_card_my_active_tasks'] = 'Active task: %s';

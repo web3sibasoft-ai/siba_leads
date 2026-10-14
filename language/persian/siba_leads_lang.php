@@ -52,6 +52,7 @@ $lang['siba_leads_auto_assign_help'] = 'سرنخ‌های جدید، از هر �
 $lang['siba_leads_auto_assign_no_sales'] = 'هیچ عضو فعالی در تیم فروش تعریف نشده است؛ سرنخ‌های جدید تا زمان تعیین اعضا به صف انتظار منتقل می‌شوند.';
 $lang['siba_leads_auto_assign_sales_count'] = 'تعداد اعضای فعال تیم فروش: %s';
 $lang['siba_leads_activity_auto_assigned'] = 'سرنخ به‌صورت خودکار به %s از تیم فروش اختصاص یافت.';
+$lang['siba_leads_activity_assigned_from_duplicate'] = 'به‌خاطر تکراری بودن شماره، به %s (مسئول سرنخ اصلی #%s) اختصاص یافت.';
 $lang['siba_leads_activity_sent_to_backlog'] = 'سرنخ به صف انتظار منتقل شد؛ عضو فعالی برای تیم فروش تعریف نشده است.';
 $lang['siba_leads_import_desc'] = 'سرنخ‌ها را از فایل CSV وارد کنید. اگر وضعیت یا منبع در یک ردیف خالی باشد، مقدار پیش‌فرض فرم در نظر گرفته می‌شود. پس از ورود اطلاعات، تخصیص خودکار به تیم فروش نیز طبق تنظیمات انجام خواهد شد.';
 $lang['siba_leads_card_my_active_tasks'] = 'وظایف فعال من: %s';

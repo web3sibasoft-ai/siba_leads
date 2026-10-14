@@ -501,6 +501,7 @@ function siba_leads_lead_extra_columns(): array
         'gbraid'                    => "varchar(500) NULL DEFAULT ''",
         'wbraid'                    => "varchar(500) NULL DEFAULT ''",
         'device_type'               => "varchar(50) NULL DEFAULT ''",
+        'industry_plan'             => "varchar(150) NULL DEFAULT ''",
         'siba_outcome'              => "varchar(20) NULL DEFAULT NULL",
         'siba_outcome_at'           => 'DATETIME NULL DEFAULT NULL',
         'siba_outcome_by'           => 'INT(11) NULL DEFAULT NULL',
@@ -521,6 +522,7 @@ function siba_leads_attribution_columns(): array
     return [
         'cta_location',
         'industry',
+        'industry_plan',
         'traffic_source',
         'utm_source',
         'utm_medium',
@@ -564,8 +566,10 @@ function siba_leads_ensure_lead_columns(): void
         return;
     }
 
-    // Skip schema probing on every admin request once columns are known-ready.
-    if (get_option('siba_leads_columns_ready') === '1') {
+    // Schema version: bump when additive lead columns are introduced (e.g. industry_plan).
+    $schemaVersion = 2;
+    $currentVersion = (int) get_option('siba_leads_schema_version');
+    if ($currentVersion >= $schemaVersion && get_option('siba_leads_columns_ready') === '1') {
         $done = true;
 
         return;
@@ -577,11 +581,9 @@ function siba_leads_ensure_lead_columns(): void
         return;
     }
 
-    $missing = false;
     foreach (siba_leads_lead_extra_columns() as $column => $definition) {
         if (!$CI->db->field_exists($column, $table)) {
             $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
-            $missing = true;
         }
     }
 
@@ -589,7 +591,6 @@ function siba_leads_ensure_lead_columns(): void
         foreach (siba_leads_location_columns() as $column => $definition) {
             if (!$CI->db->field_exists($column, $table)) {
                 $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
-                $missing = true;
             }
         }
     }
@@ -598,18 +599,20 @@ function siba_leads_ensure_lead_columns(): void
         foreach (siba_leads_profile_columns() as $column => $definition) {
             if (!$CI->db->field_exists($column, $table)) {
                 $CI->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `' . $column . '` ' . $definition);
-                $missing = true;
             }
         }
     }
 
-    // Mark ready so later requests skip information_schema probes.
     if (get_option('siba_leads_columns_ready') === false) {
         add_option('siba_leads_columns_ready', '1');
     } else {
         update_option('siba_leads_columns_ready', '1');
     }
-    unset($missing);
+    if (get_option('siba_leads_schema_version') === false) {
+        add_option('siba_leads_schema_version', (string) $schemaVersion);
+    } else {
+        update_option('siba_leads_schema_version', (string) $schemaVersion);
+    }
     $done = true;
 }
 
@@ -1665,6 +1668,185 @@ function siba_leads_restrict_tags_to_existing($tags)
     $out = array_values($out);
 
     return $returnArray ? $out : implode(',', $out);
+}
+
+/**
+ * Resolve which pipeline tag a new/manual/API lead should get.
+ * Prefer status→pipeline map; else active board; else first mapped pipeline.
+ *
+ * @return array{tag_id:int,tag_name:string,didar_pipeline_id:string}|null
+ */
+function siba_leads_resolve_pipeline_tag_for_lead(?int $statusId = null): ?array
+{
+    $pick = static function (?array $map): ?array {
+        if (!is_array($map)) {
+            return null;
+        }
+        $tagId   = (int) ($map['tag_id'] ?? 0);
+        $tagName = trim((string) ($map['tag_name'] ?? ''));
+        $pipeId  = trim((string) ($map['didar_pipeline_id'] ?? ''));
+        if ($tagId < 1 || $tagName === '') {
+            return null;
+        }
+
+        return [
+            'tag_id'            => $tagId,
+            'tag_name'          => $tagName,
+            'didar_pipeline_id' => $pipeId,
+        ];
+    };
+
+    if ($statusId !== null && $statusId > 0 && function_exists('siba_leads_didar_pipeline_map_for_status')) {
+        $fromStatus = $pick(siba_leads_didar_pipeline_map_for_status($statusId));
+        if ($fromStatus !== null) {
+            return $fromStatus;
+        }
+    }
+
+    if (function_exists('siba_leads_active_pipeline_map')) {
+        $fromActive = $pick(siba_leads_active_pipeline_map());
+        if ($fromActive !== null) {
+            return $fromActive;
+        }
+    }
+
+    if (function_exists('siba_leads_didar_list_pipeline_maps')) {
+        foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+            $fromFirst = $pick(is_array($row) ? $row : null);
+            if ($fromFirst !== null) {
+                return $fromFirst;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Merge the resolved pipeline tag onto a lead (and drop other scoped pipeline tags).
+ * Used for manual / API / website creates so cards appear on the pipeline board.
+ */
+function siba_leads_ensure_lead_pipeline_tag(int $leadId, ?int $statusId = null): bool
+{
+    if ($leadId < 1 || !empty($GLOBALS['siba_leads_didar_import'])) {
+        return false;
+    }
+    if (!function_exists('handle_tags_save')) {
+        return false;
+    }
+
+    $CI = &get_instance();
+    if ($statusId === null || $statusId < 1) {
+        $row = $CI->db->select('status')->where('id', $leadId)->get(db_prefix() . 'leads')->row();
+        $statusId = $row ? (int) $row->status : 0;
+    }
+
+    $resolved = siba_leads_resolve_pipeline_tag_for_lead($statusId > 0 ? $statusId : null);
+    if ($resolved === null) {
+        return false;
+    }
+
+    $tagName = $resolved['tag_name'];
+    $existing = function_exists('get_tags_in') ? get_tags_in($leadId, 'lead') : [];
+    if (!is_array($existing)) {
+        $existing = [];
+    }
+
+    $merged = [];
+    foreach ($existing as $name) {
+        $name = trim((string) $name);
+        if ($name !== '') {
+            $merged[] = $name;
+        }
+    }
+    if (!in_array($tagName, $merged, true)) {
+        $merged[] = $tagName;
+    }
+
+    $pipelineTagNames = [];
+    if (function_exists('siba_leads_didar_list_pipeline_maps')) {
+        foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+            $n = trim((string) ($row['tag_name'] ?? ''));
+            if ($n !== '') {
+                $pipelineTagNames[] = $n;
+            }
+        }
+    }
+    $pipelineTagNames = array_values(array_unique($pipelineTagNames));
+
+    if ($pipelineTagNames !== []) {
+        $merged = array_values(array_filter($merged, static function ($name) use ($tagName, $pipelineTagNames) {
+            if ($name === $tagName) {
+                return true;
+            }
+
+            return !in_array($name, $pipelineTagNames, true);
+        }));
+    }
+
+    // Already correct — avoid rewriting taggables.
+    $before = array_values(array_filter(array_map('trim', $existing)));
+    sort($before);
+    $after = $merged;
+    sort($after);
+    if ($before === $after) {
+        return false;
+    }
+
+    handle_tags_save(implode(',', $merged), $leadId, 'lead');
+
+    return true;
+}
+
+/**
+ * lead_created — assign active/status pipeline tag for manual + API + web leads.
+ *
+ * @param int|array $payload
+ */
+function siba_leads_action_ensure_pipeline_tag($payload): void
+{
+    if (!empty($GLOBALS['siba_leads_didar_import'])) {
+        return;
+    }
+
+    $leadId = is_array($payload) ? (int) ($payload['lead_id'] ?? 0) : (int) $payload;
+    if ($leadId < 1) {
+        return;
+    }
+
+    siba_leads_ensure_lead_pipeline_tag($leadId);
+}
+
+/**
+ * When a lead moves into a mapped pipeline column, keep its pipeline tag in sync.
+ *
+ * @param array<string,mixed> $data
+ */
+function siba_leads_action_lead_status_changed_pipeline_tag($data): void
+{
+    if (!is_array($data) || !empty($GLOBALS['siba_leads_didar_import'])) {
+        return;
+    }
+
+    $leadId = (int) ($data['lead_id'] ?? 0);
+    if ($leadId < 1) {
+        return;
+    }
+
+    $CI  = &get_instance();
+    $row = $CI->db->select('status')->where('id', $leadId)->get(db_prefix() . 'leads')->row();
+    $statusId = $row ? (int) $row->status : 0;
+    if ($statusId < 1) {
+        return;
+    }
+
+    // Only switch tags when the new status belongs to a known pipeline board.
+    if (!function_exists('siba_leads_didar_pipeline_map_for_status')
+        || siba_leads_didar_pipeline_map_for_status($statusId) === null) {
+        return;
+    }
+
+    siba_leads_ensure_lead_pipeline_tag($leadId, $statusId);
 }
 
 /**
