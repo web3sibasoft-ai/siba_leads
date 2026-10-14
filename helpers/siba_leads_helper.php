@@ -368,7 +368,8 @@ function siba_leads_kanban_statuses(): array
 
 /**
  * Status summary totals/values, respecting Siba view_all permission.
- * Scoped to the active pipeline board when Didar stages are mapped.
+ * Scoped to the active pipeline board (status columns + pipeline tag) when Didar stages are mapped.
+ * Must use the same tag filter as kanban cards (siba_leads_effective_tag_filter).
  */
 function siba_leads_get_summary(): array
 {
@@ -387,6 +388,10 @@ function siba_leads_get_summary(): array
         : $CI->leads_model->get_status();
     $canViewAll = siba_leads_can_view_all();
     $staffId    = (int) get_staff_user_id();
+    $leadIdCol  = db_prefix() . 'leads.id';
+    $tagSql     = function_exists('siba_leads_tag_filter_sql')
+        ? siba_leads_tag_filter_sql($leadIdCol)
+        : '';
     $sql        = '';
 
     $statuses[] = [
@@ -407,6 +412,8 @@ function siba_leads_get_summary(): array
             $sql .= ' AND ' . siba_leads_kanban_open_where_sql();
         }
 
+        $sql .= $tagSql;
+
         if (!$canViewAll) {
             $sql .= ' AND assigned=' . $staffId;
         }
@@ -419,6 +426,10 @@ function siba_leads_get_summary(): array
 
     if (!$canViewAll) {
         $CI->db->where('assigned', $staffId);
+    }
+    if ($tagSql !== '' && function_exists('siba_leads_apply_tag_filter_where')) {
+        $filter = siba_leads_effective_tag_filter();
+        siba_leads_apply_tag_filter_where($CI->db, $leadIdCol, $filter['tag_ids'], $filter['tag_none']);
     }
 
     $total_leads = $CI->db->count_all_results(db_prefix() . 'leads');
@@ -1775,6 +1786,58 @@ function siba_leads_request_tag_filter(): array
 }
 
 /**
+ * Tag filter actually used by the board: request tags, or active pipeline tag when none set.
+ * Shared by summary counts and kanban card queries so the header total matches visible cards.
+ *
+ * @return array{tag_ids:int[], tag_none:bool}
+ */
+function siba_leads_effective_tag_filter(): array
+{
+    $filter  = siba_leads_request_tag_filter();
+    $tagIds  = $filter['tag_ids'];
+    $tagNone = $filter['tag_none'];
+
+    // Active pipeline board: lock to that pipeline tag unless the user overrides.
+    if (!$tagNone && $tagIds === [] && function_exists('siba_leads_active_pipeline_map')) {
+        $pipeline = siba_leads_active_pipeline_map();
+        $tagId    = (int) ($pipeline['tag_id'] ?? 0);
+        if ($tagId > 0) {
+            $tagIds = [$tagId];
+        }
+    }
+
+    return [
+        'tag_ids'  => $tagIds,
+        'tag_none' => $tagNone,
+    ];
+}
+
+/**
+ * Raw SQL AND-fragment for the effective tag filter (for UNION summaries).
+ */
+function siba_leads_tag_filter_sql(string $leadIdColumn = ''): string
+{
+    if ($leadIdColumn === '') {
+        $leadIdColumn = db_prefix() . 'leads.id';
+    }
+
+    $filter    = siba_leads_effective_tag_filter();
+    $taggables = db_prefix() . 'taggables';
+
+    if ($filter['tag_none']) {
+        return ' AND ' . $leadIdColumn . ' NOT IN (SELECT rel_id FROM ' . $taggables . " WHERE rel_type = 'lead')";
+    }
+
+    $tagIds = siba_leads_normalize_tag_ids($filter['tag_ids']);
+    if ($tagIds === []) {
+        return '';
+    }
+
+    return ' AND ' . $leadIdColumn . ' IN (SELECT rel_id FROM ' . $taggables
+        . " WHERE rel_type = 'lead' AND tag_id IN (" . implode(',', array_map('intval', $tagIds)) . '))';
+}
+
+/**
  * Attach tag filter to a Siba kanban instance via tapQuery.
  *
  * @param \modules\siba_leads\services\SibaLeadsKanban $kanBan
@@ -1782,18 +1845,9 @@ function siba_leads_request_tag_filter(): array
  */
 function siba_leads_kanban_apply_tag_filter($kanBan)
 {
-    $filter = siba_leads_request_tag_filter();
-    $tagIds = $filter['tag_ids'];
+    $filter  = siba_leads_effective_tag_filter();
+    $tagIds  = $filter['tag_ids'];
     $tagNone = $filter['tag_none'];
-
-    // Active pipeline board: lock cards to that pipeline tag unless user overrides.
-    if (!$tagNone && $tagIds === []) {
-        $pipeline = siba_leads_active_pipeline_map();
-        $tagId    = (int) ($pipeline['tag_id'] ?? 0);
-        if ($tagId > 0) {
-            $tagIds = [$tagId];
-        }
-    }
 
     if (!$tagNone && $tagIds === []) {
         return $kanBan;

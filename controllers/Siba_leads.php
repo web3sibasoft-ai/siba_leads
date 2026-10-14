@@ -158,9 +158,12 @@ class Siba_leads extends AdminController
             $where[] = 'AND ' . $prefix . 'leads.assigned = ' . (int) get_staff_user_id();
         }
 
-        $tagFilter = function_exists('siba_leads_request_tag_filter')
-            ? siba_leads_request_tag_filter()
-            : ['tag_ids' => [], 'tag_none' => false];
+        // Same scope as kanban: request tags, or active pipeline tag when none set.
+        $tagFilter = function_exists('siba_leads_effective_tag_filter')
+            ? siba_leads_effective_tag_filter()
+            : (function_exists('siba_leads_request_tag_filter')
+                ? siba_leads_request_tag_filter()
+                : ['tag_ids' => [], 'tag_none' => false]);
         $taggables = $prefix . 'taggables';
         if (!empty($tagFilter['tag_none'])) {
             $where[] = 'AND ' . $prefix . 'leads.id NOT IN (SELECT rel_id FROM ' . $taggables . " WHERE rel_type = 'lead')";
@@ -589,6 +592,7 @@ class Siba_leads extends AdminController
         }
 
         $searchQ     = $this->input->get('search');
+        // Only user-requested tags (not the default pipeline tag) — shell summary already includes pipeline tag.
         $tagFilter   = function_exists('siba_leads_request_tag_filter')
             ? siba_leads_request_tag_filter()
             : ['tag_ids' => [], 'tag_none' => false];
