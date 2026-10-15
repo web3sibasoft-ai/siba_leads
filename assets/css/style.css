@@ -117,6 +117,7 @@ html[dir="rtl"] .siba-leads-kan-ban #kan-ban {
     display: flex;
     align-items: flex-start;
     flex-direction: row;
+    grid: 10px;
 }
 
 body.rtl .leads-kan-ban .kan-ban-col,
@@ -147,7 +148,7 @@ html[dir="rtl"] .siba-leads-kan-ban .kan-ban-col {
 
 .siba-leads-kan-ban .siba-lead-card__body {
     border: 1px solid #e2e8f0;
-    border-radius: 10px;
+    border-radius: 30px;
     background: #fff;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
     padding: 8px 9px 7px;
@@ -323,6 +324,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     font-size: 10px;
     font-weight: 700;
     line-height: 1.55;
+    justify-content: center;    
 }
 
 .siba-lead-card__badge--client {
@@ -352,6 +354,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     font-weight: 800;
     box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.35);
     animation: siba-reminder-pulse 2.2s ease-in-out infinite;
+    width: 100%;
 }
 
 .siba-lead-card__badge--reminder-overdue {
@@ -362,6 +365,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     font-weight: 800;
     box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);
     animation: siba-reminder-pulse 1.6s ease-in-out infinite;
+    width: 100%;
 }
 
 .siba-lead-card__badge--duplicate {
@@ -385,17 +389,17 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 /* Bold reminder highlight — solid colors so all roles/themes see them clearly */
 .siba-leads-kan-ban .siba-lead-card.has-today-reminder > .siba-lead-card__body,
 .siba-lead-card.has-today-reminder > .siba-lead-card__body {
-    border: 2px solid #d97706 !important;
+    /* border: 2px solid #d97706 !important;
     border-inline-start: 4px solid #ea580c !important;
-    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 8px 18px rgba(234, 88, 12, 0.22) !important;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 8px 18px rgba(234, 88, 12, 0.22) !important; */
     background: #ffedd5 !important;
 }
 
 .siba-leads-kan-ban .siba-lead-card.has-overdue-reminder > .siba-lead-card__body,
 .siba-lead-card.has-overdue-reminder > .siba-lead-card__body {
-    border: 2px solid #b91c1c !important;
+    /* border: 2px solid #b91c1c !important;
     border-inline-start: 4px solid #991b1b !important;
-    box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.28), 0 8px 18px rgba(185, 28, 28, 0.24) !important;
+    box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.28), 0 8px 18px rgba(185, 28, 28, 0.24) !important; */
     background: #fecaca !important;
 }
 
