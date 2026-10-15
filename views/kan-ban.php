@@ -59,11 +59,7 @@ foreach ($statuses as $status) {
                     <?php } ?>>
                     <?= e($status['name']); ?>
                 </span>
-                -
-                <?= app_format_money(
-                    $summary[$statusSummaryIndex]['value'] ?? 0,
-                    $base_currency
-                ); ?>
+              
                 -
                 <small><?= $statusTotal . ' ' . _l('leads'); ?></small>
                 <?php if ($can_create || $is_admin) { ?>

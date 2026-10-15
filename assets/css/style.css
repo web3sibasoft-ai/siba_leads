@@ -101,9 +101,10 @@ body.siba-kanban-dragging {
 }
 
 .siba-leads-kan-ban .kan-ban-col {
-    min-width: 320px;
+    min-width: 250px;
+    max-width: 270px;
     float: none;
-    margin-right: 6px;
+    margin-right: 4px;
     margin-left: 0;
 }
 
@@ -124,28 +125,32 @@ body.rtl .siba-leads-kan-ban .kan-ban-col,
 html[dir="rtl"] .siba-leads-kan-ban .kan-ban-col {
     float: none;
     margin-right: 0;
-    margin-left: 6px;
+    margin-left: 4px;
 }
 
 .siba-leads-kan-ban .panel-heading {
-    border-radius: 12px 12px 0 0;
+    border-radius: 10px 10px 0 0;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    font-size: 11px;
 }
 
 .siba-leads-kan-ban .kanban-leads-sort a {
     margin-inline: 2px;
+    font-size: 11px;
 }
 
 /* Lead cards */
 .siba-leads-kan-ban .siba-lead-card {
-    margin-bottom: 10px;
+    margin-bottom: 7px;
 }
 
 .siba-leads-kan-ban .siba-lead-card__body {
     border: 1px solid #e2e8f0;
-    border-radius: 14px;
+    border-radius: 10px;
     background: #fff;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-    padding: 14px 14px 12px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    padding: 8px 9px 7px;
     transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
@@ -163,42 +168,49 @@ html[dir="rtl"] .siba-leads-kan-ban .kan-ban-col {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 5px;
 }
 
 .siba-lead-card__identity {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 6px;
     min-width: 0;
     flex: 1;
+}
+
+.siba-lead-card__drag-handle {
+    width: 16px;
+    height: 22px;
+    margin-top: 1px;
+    font-size: 11px;
 }
 
 .siba-lead-card__assignee {
     display: flex;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .siba-lead-card__assignee-link {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     max-width: 100%;
-    padding: 4px 10px 4px 4px;
+    padding: 2px 7px 2px 2px;
     border-radius: 999px;
     background: #f1f5f9;
     color: #334155;
     text-decoration: none;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     line-height: 1.2;
 }
 
 body.rtl .siba-lead-card__assignee-link,
 html[dir="rtl"] .siba-lead-card__assignee-link {
-    padding: 4px 4px 4px 10px;
+    padding: 2px 2px 2px 7px;
 }
 
 .siba-lead-card__assignee-link:hover {
@@ -215,8 +227,8 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 .siba-lead-card__assignee-img,
 .siba-lead-card__assignee-link img,
 .siba-lead-card__assignee-img--empty {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     border-radius: 999px;
     object-fit: cover;
     flex-shrink: 0;
@@ -228,7 +240,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     justify-content: center;
     background: #ffedd5;
     color: #c2410c;
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .siba-lead-card__assignee-name {
@@ -268,9 +280,9 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 
 .siba-lead-card__name {
     display: block;
-    font-size: 15px;
+    font-size: 12.5px;
     font-weight: 700;
-    line-height: 1.35;
+    line-height: 1.3;
     color: #0f172a;
     text-decoration: none;
     word-break: break-word;
@@ -284,11 +296,11 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
-    margin-top: 3px;
+    gap: 3px;
+    margin-top: 2px;
     color: #64748b;
-    font-size: 12px;
-    line-height: 1.4;
+    font-size: 10.5px;
+    line-height: 1.35;
 }
 
 .siba-lead-card__id {
@@ -297,7 +309,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 }
 
 .siba-lead-card__company {
-    max-width: 160px;
+    max-width: 120px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -306,10 +318,11 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 .siba-lead-card__badge {
     display: inline-flex;
     align-items: center;
-    padding: 1px 7px;
+    padding: 0 6px;
     border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.55;
 }
 
 .siba-lead-card__badge--client {
@@ -332,23 +345,27 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 }
 
 .siba-lead-card__badge--reminder-today {
-    gap: 4px;
-    background: #fef3c7;
-    color: #b45309;
-    border: 1px solid #fbbf24;
+    gap: 3px;
+    background: #f59e0b !important;
+    color: #ffffff !important;
+    border: 1px solid #d97706 !important;
+    font-weight: 800;
+    box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.35);
     animation: siba-reminder-pulse 2.2s ease-in-out infinite;
 }
 
 .siba-lead-card__badge--reminder-overdue {
-    gap: 4px;
-    background: #fef2f2;
-    color: #b91c1c;
-    border: 1px solid #fca5a5;
+    gap: 3px;
+    background: #dc2626 !important;
+    color: #ffffff !important;
+    border: 1px solid #b91c1c !important;
+    font-weight: 800;
+    box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);
     animation: siba-reminder-pulse 1.6s ease-in-out infinite;
 }
 
 .siba-lead-card__badge--duplicate {
-    gap: 4px;
+    gap: 3px;
     background: #fef3c7;
     color: #92400e;
     border: 1px solid #fcd34d;
@@ -365,22 +382,26 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border-inline-start: 3px solid #f97316;
 }
 
+/* Bold reminder highlight — solid colors so all roles/themes see them clearly */
+.siba-leads-kan-ban .siba-lead-card.has-today-reminder > .siba-lead-card__body,
 .siba-lead-card.has-today-reminder > .siba-lead-card__body {
-    border-color: #f59e0b;
-    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28), 0 10px 24px rgba(245, 158, 11, 0.12);
-    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+    border: 2px solid #d97706 !important;
+    border-inline-start: 4px solid #ea580c !important;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 8px 18px rgba(234, 88, 12, 0.22) !important;
+    background: #ffedd5 !important;
 }
 
+.siba-leads-kan-ban .siba-lead-card.has-overdue-reminder > .siba-lead-card__body,
 .siba-lead-card.has-overdue-reminder > .siba-lead-card__body {
-    border-color: #ef4444;
-    border-inline-start: 3px solid #dc2626;
-    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3), 0 12px 26px rgba(220, 38, 38, 0.14);
-    background: linear-gradient(180deg, #fef2f2 0%, #ffffff 46%);
+    border: 2px solid #b91c1c !important;
+    border-inline-start: 4px solid #991b1b !important;
+    box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.28), 0 8px 18px rgba(185, 28, 28, 0.24) !important;
+    background: #fecaca !important;
 }
 
 @keyframes siba-reminder-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.72; }
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.88; transform: scale(1.03); }
 }
 
 .siba-lead-phone-warning {
@@ -408,14 +429,15 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border: 0;
     background: #f8fafc;
     color: #64748b;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     cursor: pointer;
+    font-size: 11px;
     transition: background .15s ease, color .15s ease;
 }
 
@@ -427,21 +449,21 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 .siba-lead-card__meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 10px;
+    gap: 4px;
+    margin-bottom: 6px;
 }
 
 .siba-lead-card__chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     max-width: 100%;
-    padding: 4px 9px;
+    padding: 2px 6px;
     border-radius: 999px;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     color: #334155;
-    font-size: 12px;
+    font-size: 10.5px;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
@@ -450,7 +472,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 
 .siba-lead-card__chip i {
     color: #64748b;
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .siba-lead-card__chip--value {
@@ -748,6 +770,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     gap: 8px;
     padding-top: 8px;
     border-top: 1px solid #f1f5f9;
+    flex-direction: column;
 }
 
 .siba-lead-card__dates,
@@ -836,6 +859,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     align-items: stretch;
     gap: 8px;
     margin-top: 10px;
+    flex-direction: column;
 }
 
 .siba-lead-card__actions > .siba-lead-card__follow-btn,
