@@ -1098,6 +1098,66 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
         }
     }
 
+    // Due/overdue reminders on lead + on lead-related tasks (today or past).
+    $reminderByLead = [];
+    if ($tableOk($prefix . 'reminders')) {
+        $todayEndSql = "DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+
+        $leadReminderRows = $CI->db->query(
+            'SELECT rel_id, COUNT(id) AS total, MIN(date) AS earliest'
+            . ' FROM ' . $prefix . 'reminders'
+            . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ')'
+            . ' AND date < ' . $todayEndSql
+            . ' GROUP BY rel_id'
+        )->result_array();
+        foreach ($leadReminderRows as $row) {
+            $lid = (int) ($row['rel_id'] ?? 0);
+            if ($lid < 1) {
+                continue;
+            }
+            $reminderByLead[$lid] = [
+                'count'    => (int) ($row['total'] ?? 0),
+                'earliest' => (string) ($row['earliest'] ?? ''),
+                'on_lead'  => true,
+                'on_task'  => false,
+            ];
+        }
+
+        if ($tableOk($prefix . 'tasks')) {
+            $taskReminderRows = $CI->db->query(
+                'SELECT t.rel_id AS lead_id, COUNT(r.id) AS total, MIN(r.date) AS earliest'
+                . ' FROM ' . $prefix . 'reminders r'
+                . ' INNER JOIN ' . $prefix . 'tasks t ON t.id = r.rel_id AND t.rel_type = "lead"'
+                . ' WHERE r.rel_type = "task" AND t.rel_id IN (' . $idList . ')'
+                . ' AND r.date < ' . $todayEndSql
+                . ' GROUP BY t.rel_id'
+            )->result_array();
+            foreach ($taskReminderRows as $row) {
+                $lid = (int) ($row['lead_id'] ?? 0);
+                if ($lid < 1) {
+                    continue;
+                }
+                $count    = (int) ($row['total'] ?? 0);
+                $earliest = (string) ($row['earliest'] ?? '');
+                if (!isset($reminderByLead[$lid])) {
+                    $reminderByLead[$lid] = [
+                        'count'    => $count,
+                        'earliest' => $earliest,
+                        'on_lead'  => false,
+                        'on_task'  => true,
+                    ];
+                    continue;
+                }
+                $reminderByLead[$lid]['count'] += $count;
+                $reminderByLead[$lid]['on_task'] = true;
+                $prev = (string) ($reminderByLead[$lid]['earliest'] ?? '');
+                if ($earliest !== '' && ($prev === '' || strcmp($earliest, $prev) < 0)) {
+                    $reminderByLead[$lid]['earliest'] = $earliest;
+                }
+            }
+        }
+    }
+
     // Orders (active + any) + invoice + pending fin
     $activeByLead   = [];
     $anyOrderByLead = [];
@@ -1215,6 +1275,25 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
         $leads[$idx]['total_notes']    = (int) ($notesByLead[$id] ?? 0);
         $leads[$idx]['tags']           = (string) ($tagsByLead[$id] ?? '');
         $leads[$idx]['my_active_tasks'] = (int) ($tasksByLead[$id] ?? 0);
+
+        $reminderInfo = $reminderByLead[$id] ?? null;
+        if ($reminderInfo && (int) ($reminderInfo['count'] ?? 0) > 0) {
+            $earliest = (string) ($reminderInfo['earliest'] ?? '');
+            $earliestDay = $earliest !== '' ? substr($earliest, 0, 10) : '';
+            $today = date('Y-m-d');
+            $status = ($earliestDay !== '' && $earliestDay < $today) ? 'overdue' : 'today';
+            $leads[$idx]['reminder_due_count']  = (int) $reminderInfo['count'];
+            $leads[$idx]['reminder_due_status'] = $status;
+            $leads[$idx]['reminder_due_date']   = $earliest;
+            $leads[$idx]['reminder_on_lead']    = !empty($reminderInfo['on_lead']) ? 1 : 0;
+            $leads[$idx]['reminder_on_task']    = !empty($reminderInfo['on_task']) ? 1 : 0;
+        } else {
+            $leads[$idx]['reminder_due_count']  = 0;
+            $leads[$idx]['reminder_due_status'] = '';
+            $leads[$idx]['reminder_due_date']   = '';
+            $leads[$idx]['reminder_on_lead']    = 0;
+            $leads[$idx]['reminder_on_task']    = 0;
+        }
 
         $active = $activeByLead[$id] ?? null;
         if ($active) {
@@ -1716,17 +1795,48 @@ function siba_leads_normalize_pipeline_tag_map(?array $map): ?array
 }
 
 /**
+ * Status id preferred for pipeline tagging (API may set this before RR rewrites status).
+ */
+function siba_leads_requested_pipeline_status(): int
+{
+    return (int) ($GLOBALS['siba_leads_requested_pipeline_status'] ?? 0);
+}
+
+/**
+ * Remember the client-selected status for pipeline tagging (cleared after create).
+ */
+function siba_leads_set_requested_pipeline_status(int $statusId): void
+{
+    if ($statusId > 0) {
+        $GLOBALS['siba_leads_requested_pipeline_status'] = $statusId;
+    } else {
+        unset($GLOBALS['siba_leads_requested_pipeline_status']);
+    }
+}
+
+/**
  * Resolve which pipeline tag a new/manual/API lead should get.
- * Prefer status→pipeline map; else active board; else first mapped pipeline.
+ * Prefer status→pipeline map; else remembered API status; else active board; else first mapped pipeline.
  *
  * @return array{tag_id:int,tag_name:string,didar_pipeline_id:string}|null
  */
 function siba_leads_resolve_pipeline_tag_for_lead(?int $statusId = null): ?array
 {
-    if ($statusId !== null && $statusId > 0 && function_exists('siba_leads_didar_pipeline_map_for_status')) {
-        $fromStatus = siba_leads_normalize_pipeline_tag_map(siba_leads_didar_pipeline_map_for_status($statusId));
-        if ($fromStatus !== null) {
-            return $fromStatus;
+    $candidates = [];
+    if ($statusId !== null && $statusId > 0) {
+        $candidates[] = $statusId;
+    }
+    $requested = siba_leads_requested_pipeline_status();
+    if ($requested > 0 && !in_array($requested, $candidates, true)) {
+        $candidates[] = $requested;
+    }
+
+    if (function_exists('siba_leads_didar_pipeline_map_for_status')) {
+        foreach ($candidates as $sid) {
+            $fromStatus = siba_leads_normalize_pipeline_tag_map(siba_leads_didar_pipeline_map_for_status($sid));
+            if ($fromStatus !== null) {
+                return $fromStatus;
+            }
         }
     }
 
@@ -1747,6 +1857,67 @@ function siba_leads_resolve_pipeline_tag_for_lead(?int $statusId = null): ?array
     }
 
     return null;
+}
+
+/**
+ * Merge the pipeline tag name for $statusId into a tags string/array.
+ *
+ * @param mixed $tags
+ * @return mixed
+ */
+function siba_leads_merge_pipeline_tag_into_tags($tags, ?int $statusId = null)
+{
+    $resolved = siba_leads_resolve_pipeline_tag_for_lead($statusId);
+    if ($resolved === null) {
+        return $tags;
+    }
+
+    $tagName = trim((string) ($resolved['tag_name'] ?? ''));
+    if ($tagName === '') {
+        return $tags;
+    }
+
+    $returnArray = is_array($tags);
+    $list        = $returnArray ? $tags : explode(',', (string) ($tags ?? ''));
+    $merged      = [];
+    $have        = false;
+    $needle      = function_exists('mb_strtolower') ? mb_strtolower($tagName, 'UTF-8') : strtolower($tagName);
+
+    foreach ($list as $name) {
+        $name = trim((string) $name);
+        if ($name === '') {
+            continue;
+        }
+        $merged[] = $name;
+        $cmp = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+        if ($cmp === $needle) {
+            $have = true;
+        }
+    }
+    if (!$have) {
+        $merged[] = $tagName;
+    }
+
+    return $returnArray ? $merged : implode(',', $merged);
+}
+
+/**
+ * before_lead_added: ensure pipeline kanban tag is present based on status.
+ * Runs after assignment may rewrite status; still honors remembered API status.
+ *
+ * @param mixed $data
+ * @return mixed
+ */
+function siba_leads_filter_inject_pipeline_tag($data)
+{
+    if (!is_array($data) || !empty($GLOBALS['siba_leads_didar_import'])) {
+        return $data;
+    }
+
+    $statusId = (int) ($data['status'] ?? 0);
+    $data['tags'] = siba_leads_merge_pipeline_tag_into_tags($data['tags'] ?? '', $statusId > 0 ? $statusId : null);
+
+    return $data;
 }
 
 /**
@@ -1854,7 +2025,9 @@ function siba_leads_action_ensure_pipeline_tag($payload): void
         return;
     }
 
-    siba_leads_ensure_lead_pipeline_tag($leadId);
+    $statusId = siba_leads_requested_pipeline_status();
+    siba_leads_ensure_lead_pipeline_tag($leadId, $statusId > 0 ? $statusId : null);
+    unset($GLOBALS['siba_leads_requested_pipeline_status']);
 }
 
 /**

@@ -33,7 +33,9 @@ hooks()->add_filter('before_lead_added', 'siba_leads_filter_website_payload', 5)
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_before_lead_added');
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_lead_location_fields', 20);
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_profile_fields', 25);
+hooks()->add_filter('before_lead_added', 'siba_leads_filter_inject_pipeline_tag', 28);
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_lead_tags_no_autocreate', 30);
+hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_inject_pipeline_tag', 28);
 hooks()->add_action('lead_created', 'siba_leads_action_ensure_pipeline_tag', 5);
 hooks()->add_action('lead_created', 'siba_leads_action_lead_created');
 hooks()->add_action('lead_created', 'siba_leads_action_website_lead_created', 30);
@@ -496,7 +498,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261011b') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261015reminder') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()

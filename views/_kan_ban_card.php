@@ -22,9 +22,18 @@ $locked_class  = $lead_is_client && get_option('lead_lock_after_convert_to_custo
 $mine_class = $lead['assigned'] == get_staff_user_id() ? ' current-user-lead' : '';
 $myActiveTasks = (int) ($lead['my_active_tasks'] ?? 0);
 $hasMyActiveTask = $myActiveTasks > 0;
+$reminderDueCount  = (int) ($lead['reminder_due_count'] ?? 0);
+$reminderDueStatus = (string) ($lead['reminder_due_status'] ?? '');
+$hasDueReminder    = $reminderDueCount > 0 && ($reminderDueStatus === 'today' || $reminderDueStatus === 'overdue');
+$reminderCardClass = '';
+if ($hasDueReminder) {
+    $reminderCardClass = $reminderDueStatus === 'overdue'
+        ? ' has-overdue-reminder'
+        : ' has-today-reminder';
+}
 ?>
 <li data-lead-id="<?= e($lead['id']); ?>"<?= $lead_already_client_tooltip; ?>
-    class="lead-kan-ban siba-lead-card<?= $mine_class . $locked_class; ?><?= $hasMyActiveTask ? ' has-my-active-task' : ''; ?>">
+    class="lead-kan-ban siba-lead-card<?= $mine_class . $locked_class; ?><?= $hasMyActiveTask ? ' has-my-active-task' : ''; ?><?= $reminderCardClass; ?>">
     <div class="panel-body lead-body siba-lead-card__body">
         <div class="siba-lead-card__header">
             <div class="siba-lead-card__identity">
@@ -75,6 +84,43 @@ $hasMyActiveTask = $myActiveTasks > 0;
                             title="<?= e(_l('siba_leads_card_my_active_tasks_tooltip', $myActiveTasks)); ?>">
                             <i class="fa-regular fa-circle-check"></i>
                             <?= e(_l('siba_leads_card_my_active_tasks', $myActiveTasks)); ?>
+                        </span>
+                        <?php } ?>
+                        <?php if ($hasDueReminder) {
+                            $reminderDateRaw = (string) ($lead['reminder_due_date'] ?? '');
+                            $reminderDateView = $reminderDateRaw !== ''
+                                ? (function_exists('siba_leads_jalali_datetime')
+                                    ? siba_leads_jalali_datetime($reminderDateRaw)
+                                    : _dt($reminderDateRaw))
+                                : '';
+                            $onLead = !empty($lead['reminder_on_lead']);
+                            $onTask = !empty($lead['reminder_on_task']);
+                            if ($onLead && $onTask) {
+                                $sourceLabel = _l('siba_leads_card_reminder_source_both');
+                            } elseif ($onTask) {
+                                $sourceLabel = _l('siba_leads_card_reminder_source_task');
+                            } else {
+                                $sourceLabel = _l('siba_leads_card_reminder_source_lead');
+                            }
+                            $badgeClass = $reminderDueStatus === 'overdue'
+                                ? 'siba-lead-card__badge--reminder-overdue'
+                                : 'siba-lead-card__badge--reminder-today';
+                            $badgeText = $reminderDueStatus === 'overdue'
+                                ? _l('siba_leads_card_reminder_overdue', $reminderDueCount)
+                                : _l('siba_leads_card_reminder_today', $reminderDueCount);
+                            $tooltip = $reminderDueStatus === 'overdue'
+                                ? _l('siba_leads_card_reminder_overdue_tooltip', $reminderDueCount)
+                                : _l('siba_leads_card_reminder_today_tooltip', $reminderDueCount);
+                            $tooltip .= ' — ' . $sourceLabel;
+                            if ($reminderDateView !== '') {
+                                $tooltip .= ' (' . $reminderDateView . ')';
+                            }
+                            ?>
+                        <span class="siba-lead-card__badge <?= e($badgeClass); ?>"
+                            data-toggle="tooltip"
+                            title="<?= e($tooltip); ?>">
+                            <i class="fa-regular fa-bell"></i>
+                            <?= e($badgeText); ?>
                         </span>
                         <?php } ?>
                         <?php

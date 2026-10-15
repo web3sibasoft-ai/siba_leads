@@ -331,6 +331,22 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border: 1px solid #fdba74;
 }
 
+.siba-lead-card__badge--reminder-today {
+    gap: 4px;
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fbbf24;
+    animation: siba-reminder-pulse 2.2s ease-in-out infinite;
+}
+
+.siba-lead-card__badge--reminder-overdue {
+    gap: 4px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+    animation: siba-reminder-pulse 1.6s ease-in-out infinite;
+}
+
 .siba-lead-card__badge--duplicate {
     gap: 4px;
     background: #fef3c7;
@@ -347,6 +363,24 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 
 .siba-lead-card.has-my-active-task > .siba-lead-card__body {
     border-inline-start: 3px solid #f97316;
+}
+
+.siba-lead-card.has-today-reminder > .siba-lead-card__body {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.28), 0 10px 24px rgba(245, 158, 11, 0.12);
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 42%);
+}
+
+.siba-lead-card.has-overdue-reminder > .siba-lead-card__body {
+    border-color: #ef4444;
+    border-inline-start: 3px solid #dc2626;
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3), 0 12px 26px rgba(220, 38, 38, 0.14);
+    background: linear-gradient(180deg, #fef2f2 0%, #ffffff 46%);
+}
+
+@keyframes siba-reminder-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.72; }
 }
 
 .siba-lead-phone-warning {
