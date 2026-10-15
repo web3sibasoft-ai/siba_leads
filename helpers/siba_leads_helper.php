@@ -2348,7 +2348,7 @@ function siba_leads_ensure_lead_pipeline_tag(int $leadId, ?int $statusId = null)
         'rel_id'   => $leadId,
         'rel_type' => 'lead',
     ]);
-    if ($exists < 1) {
+    // if ($exists < 1) {
         $maxOrder = 0;
         $orderRow = $CI->db->select_max('tag_order')
             ->where('rel_id', $leadId)
@@ -2367,7 +2367,7 @@ function siba_leads_ensure_lead_pipeline_tag(int $leadId, ?int $statusId = null)
         if ($CI->db->affected_rows() > 0) {
             $changed = true;
         }
-    }
+    // }
 
     if ($changed) {
         siba_leads_clear_tags_cache();
