@@ -2411,6 +2411,8 @@ function siba_leads_intercept_lead_tags_post(): void
     if ($pipelineTagId > 0 && siba_leads_pipeline_map_by_tag_id($pipelineTagId) !== null) {
         siba_leads_set_requested_pipeline_tag_id($pipelineTagId);
     }
+    // Not a tblleads column — must not reach Leads_model::update().
+    unset($_POST['siba_pipeline_tag']);
 
     if (!array_key_exists('tags', $_POST) && $pipelineTagId < 1) {
         return;
