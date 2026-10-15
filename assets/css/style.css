@@ -386,21 +386,30 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     border-inline-start: 3px solid #f97316;
 }
 
-/* Bold reminder highlight — solid colors so all roles/themes see them clearly */
+/* Urgency highlight: orange = due today (task/reminder), red = overdue (task/reminder) */
 .siba-leads-kan-ban .siba-lead-card.has-today-reminder > .siba-lead-card__body,
 .siba-lead-card.has-today-reminder > .siba-lead-card__body {
-    /* border: 2px solid #d97706 !important;
-    border-inline-start: 4px solid #ea580c !important;
-    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25), 0 8px 18px rgba(234, 88, 12, 0.22) !important; */
     background: #ffedd5 !important;
+    border-inline-start: 4px solid #ea580c !important;
 }
 
 .siba-leads-kan-ban .siba-lead-card.has-overdue-reminder > .siba-lead-card__body,
 .siba-lead-card.has-overdue-reminder > .siba-lead-card__body {
-    /* border: 2px solid #b91c1c !important;
-    border-inline-start: 4px solid #991b1b !important;
-    box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.28), 0 8px 18px rgba(185, 28, 28, 0.24) !important; */
     background: #fecaca !important;
+    border-inline-start: 4px solid #dc2626 !important;
+}
+
+/* Overdue wins over today (and over the soft "my active task" stripe). */
+.siba-leads-kan-ban .siba-lead-card.has-overdue-reminder.has-my-active-task > .siba-lead-card__body,
+.siba-lead-card.has-overdue-reminder.has-my-active-task > .siba-lead-card__body {
+    border-inline-start: 4px solid #dc2626 !important;
+    background: #fecaca !important;
+}
+
+.siba-leads-kan-ban .siba-lead-card.has-today-reminder.has-my-active-task > .siba-lead-card__body,
+.siba-lead-card.has-today-reminder.has-my-active-task > .siba-lead-card__body {
+    border-inline-start: 4px solid #ea580c !important;
+    background: #ffedd5 !important;
 }
 
 @keyframes siba-reminder-pulse {

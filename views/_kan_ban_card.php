@@ -22,18 +22,30 @@ $locked_class  = $lead_is_client && get_option('lead_lock_after_convert_to_custo
 $mine_class = $lead['assigned'] == get_staff_user_id() ? ' current-user-lead' : '';
 $myActiveTasks = (int) ($lead['my_active_tasks'] ?? 0);
 $hasMyActiveTask = $myActiveTasks > 0;
+$taskDueCount      = (int) ($lead['task_due_count'] ?? 0);
+$taskDueStatus     = (string) ($lead['task_due_status'] ?? '');
+$hasDueTask        = $taskDueCount > 0 && ($taskDueStatus === 'today' || $taskDueStatus === 'overdue');
 $reminderDueCount  = (int) ($lead['reminder_due_count'] ?? 0);
 $reminderDueStatus = (string) ($lead['reminder_due_status'] ?? '');
 $hasDueReminder    = $reminderDueCount > 0 && ($reminderDueStatus === 'today' || $reminderDueStatus === 'overdue');
-$reminderCardClass = '';
-if ($hasDueReminder) {
-    $reminderCardClass = $reminderDueStatus === 'overdue'
-        ? ' has-overdue-reminder'
-        : ' has-today-reminder';
+// Orange = due today (task or reminder); red = overdue (task or reminder). Overdue wins.
+$cardUrgency = (string) ($lead['card_urgency'] ?? '');
+if ($cardUrgency === '' && ($hasDueTask || $hasDueReminder)) {
+    if ($taskDueStatus === 'overdue' || $reminderDueStatus === 'overdue') {
+        $cardUrgency = 'overdue';
+    } else {
+        $cardUrgency = 'today';
+    }
+}
+$urgencyCardClass = '';
+if ($cardUrgency === 'overdue') {
+    $urgencyCardClass = ' has-overdue-reminder';
+} elseif ($cardUrgency === 'today') {
+    $urgencyCardClass = ' has-today-reminder';
 }
 ?>
 <li data-lead-id="<?= e($lead['id']); ?>" <?= $lead_already_client_tooltip; ?>
-    class="lead-kan-ban siba-lead-card<?= $mine_class . $locked_class; ?><?= $hasMyActiveTask ? ' has-my-active-task' : ''; ?><?= $reminderCardClass; ?>">
+    class="lead-kan-ban siba-lead-card<?= $mine_class . $locked_class; ?><?= $hasMyActiveTask ? ' has-my-active-task' : ''; ?><?= $urgencyCardClass; ?>">
     <div class="panel-body lead-body siba-lead-card__body">
         <div class="siba-lead-card__header">
             <div class="siba-lead-card__identity">
@@ -138,6 +150,34 @@ if ($hasDueReminder) {
             }
         }
         ?>
+
+        <?php if ($hasDueTask) {
+            $taskDateRaw = (string) ($lead['task_due_date'] ?? '');
+            $taskDateView = $taskDateRaw !== ''
+                ? (function_exists('siba_leads_jalali_datetime')
+                    ? siba_leads_jalali_datetime($taskDateRaw)
+                    : (function_exists('_d') ? _d($taskDateRaw) : $taskDateRaw))
+                : '';
+            $taskBadgeClass = $taskDueStatus === 'overdue'
+                ? 'siba-lead-card__badge--reminder-overdue'
+                : 'siba-lead-card__badge--reminder-today';
+            $taskBadgeText = $taskDueStatus === 'overdue'
+                ? _l('siba_leads_card_task_overdue', $taskDueCount)
+                : _l('siba_leads_card_task_today', $taskDueCount);
+            $taskTooltip = $taskDueStatus === 'overdue'
+                ? _l('siba_leads_card_task_overdue_tooltip', $taskDueCount)
+                : _l('siba_leads_card_task_today_tooltip', $taskDueCount);
+            if ($taskDateView !== '') {
+                $taskTooltip .= ' (' . $taskDateView . ')';
+            }
+        ?>
+            <span class="siba-lead-card__badge w-100 <?= e($taskBadgeClass); ?>"
+                data-toggle="tooltip"
+                title="<?= e($taskTooltip); ?>">
+                <i class="fa-regular fa-calendar-check"></i>
+                <?= e($taskBadgeText); ?>
+            </span>
+        <?php } ?>
 
         <?php if ($hasDueReminder) {
             $reminderDateRaw = (string) ($lead['reminder_due_date'] ?? '');

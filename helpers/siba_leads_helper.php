@@ -1098,15 +1098,41 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
         }
     }
 
+    $todayEndSql = 'DATE_ADD(CURDATE(), INTERVAL 1 DAY)';
+
+    // Incomplete lead tasks with due date today or past.
+    $taskDueByLead = [];
+    if ($tableOk($prefix . 'tasks') && $fieldOk('duedate', $prefix . 'tasks')) {
+        $taskDueRows = $CI->db->query(
+            'SELECT rel_id, COUNT(id) AS total, MIN(duedate) AS earliest'
+            . ' FROM ' . $prefix . 'tasks'
+            . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ')'
+            . ' AND status != 5'
+            . ' AND duedate IS NOT NULL AND duedate != "0000-00-00" AND duedate != "0000-00-00 00:00:00"'
+            . ' AND duedate < ' . $todayEndSql
+            . ' GROUP BY rel_id'
+        )->result_array();
+        foreach ($taskDueRows as $row) {
+            $lid = (int) ($row['rel_id'] ?? 0);
+            if ($lid < 1) {
+                continue;
+            }
+            $taskDueByLead[$lid] = [
+                'count'    => (int) ($row['total'] ?? 0),
+                'earliest' => (string) ($row['earliest'] ?? ''),
+            ];
+        }
+    }
+
     // Due/overdue reminders on lead + on lead-related tasks (today or past).
     $reminderByLead = [];
     if ($tableOk($prefix . 'reminders')) {
-        $todayEndSql = "DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
-
+        // Only open reminders (same as Perfex "My Reminders": isnotified = 0).
         $leadReminderRows = $CI->db->query(
             'SELECT rel_id, COUNT(id) AS total, MIN(date) AS earliest'
             . ' FROM ' . $prefix . 'reminders'
             . ' WHERE rel_type = "lead" AND rel_id IN (' . $idList . ')'
+            . ' AND isnotified = 0'
             . ' AND date < ' . $todayEndSql
             . ' GROUP BY rel_id'
         )->result_array();
@@ -1129,6 +1155,7 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
                 . ' FROM ' . $prefix . 'reminders r'
                 . ' INNER JOIN ' . $prefix . 'tasks t ON t.id = r.rel_id AND t.rel_type = "lead"'
                 . ' WHERE r.rel_type = "task" AND t.rel_id IN (' . $idList . ')'
+                . ' AND r.isnotified = 0'
                 . ' AND r.date < ' . $todayEndSql
                 . ' GROUP BY t.rel_id'
             )->result_array();
@@ -1276,14 +1303,33 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
         $leads[$idx]['tags']           = (string) ($tagsByLead[$id] ?? '');
         $leads[$idx]['my_active_tasks'] = (int) ($tasksByLead[$id] ?? 0);
 
+        $today = date('Y-m-d');
+        $urgencyFromDate = static function (string $earliest) use ($today): string {
+            $day = $earliest !== '' ? substr($earliest, 0, 10) : '';
+            if ($day === '') {
+                return 'today';
+            }
+
+            return $day < $today ? 'overdue' : 'today';
+        };
+
+        $taskDueInfo = $taskDueByLead[$id] ?? null;
+        if ($taskDueInfo && (int) ($taskDueInfo['count'] ?? 0) > 0) {
+            $taskEarliest = (string) ($taskDueInfo['earliest'] ?? '');
+            $leads[$idx]['task_due_count']  = (int) $taskDueInfo['count'];
+            $leads[$idx]['task_due_status'] = $urgencyFromDate($taskEarliest);
+            $leads[$idx]['task_due_date']   = $taskEarliest;
+        } else {
+            $leads[$idx]['task_due_count']  = 0;
+            $leads[$idx]['task_due_status'] = '';
+            $leads[$idx]['task_due_date']   = '';
+        }
+
         $reminderInfo = $reminderByLead[$id] ?? null;
         if ($reminderInfo && (int) ($reminderInfo['count'] ?? 0) > 0) {
             $earliest = (string) ($reminderInfo['earliest'] ?? '');
-            $earliestDay = $earliest !== '' ? substr($earliest, 0, 10) : '';
-            $today = date('Y-m-d');
-            $status = ($earliestDay !== '' && $earliestDay < $today) ? 'overdue' : 'today';
             $leads[$idx]['reminder_due_count']  = (int) $reminderInfo['count'];
-            $leads[$idx]['reminder_due_status'] = $status;
+            $leads[$idx]['reminder_due_status'] = $urgencyFromDate($earliest);
             $leads[$idx]['reminder_due_date']   = $earliest;
             $leads[$idx]['reminder_on_lead']    = !empty($reminderInfo['on_lead']) ? 1 : 0;
             $leads[$idx]['reminder_on_task']    = !empty($reminderInfo['on_task']) ? 1 : 0;
@@ -1293,6 +1339,17 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
             $leads[$idx]['reminder_due_date']   = '';
             $leads[$idx]['reminder_on_lead']    = 0;
             $leads[$idx]['reminder_on_task']    = 0;
+        }
+
+        // Card color: overdue wins over today (task due date OR reminder).
+        $taskStatus     = (string) ($leads[$idx]['task_due_status'] ?? '');
+        $reminderStatus = (string) ($leads[$idx]['reminder_due_status'] ?? '');
+        if ($taskStatus === 'overdue' || $reminderStatus === 'overdue') {
+            $leads[$idx]['card_urgency'] = 'overdue';
+        } elseif ($taskStatus === 'today' || $reminderStatus === 'today') {
+            $leads[$idx]['card_urgency'] = 'today';
+        } else {
+            $leads[$idx]['card_urgency'] = '';
         }
 
         $active = $activeByLead[$id] ?? null;
