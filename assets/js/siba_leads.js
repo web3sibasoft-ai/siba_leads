@@ -2541,29 +2541,18 @@
             });
             available = filteredTags;
             availableIds = filteredIds;
-
-            try {
-                if ($input.data('ui-tagit')) {
-                    var current = $input.tagit('assignedTags') || [];
-                    filterOutPipelineTagNames(current).forEach(function () { /* collect below */ });
-                    var keep = filterOutPipelineTagNames(current);
-                    $input.tagit('removeAll');
-                    keep.forEach(function (tag) {
-                        $input.tagit('createTag', tag);
-                    });
-                } else {
-                    var raw = String($input.val() || '').split(',');
-                    $input.val(filterOutPipelineTagNames(raw).join(','));
-                }
-            } catch (eStrip) {
-                var rawVal = String($input.val() || '').split(',');
-                $input.val(filterOutPipelineTagNames(rawVal).join(','));
-            }
         }
 
-        var availableLower = available.map(function (t) {
-            return String(t).toLowerCase();
-        });
+        var currentTags = [];
+        try {
+            if ($input.data('ui-tagit')) {
+                currentTags = $input.tagit('assignedTags') || [];
+            }
+        } catch (eRead) { /* ignore */ }
+        if (!currentTags.length) {
+            currentTags = String($input.val() || '').split(',');
+        }
+        currentTags = filterOutPipelineTagNames(currentTags);
 
         try {
             if ($input.data('ui-tagit')) {
@@ -2571,10 +2560,11 @@
             }
         } catch (e) { /* ignore */ }
 
-        // Ensure value has no leftover pipeline names before re-init.
-        if (Object.keys(blocked).length) {
-            $input.val(filterOutPipelineTagNames(String($input.val() || '').split(',')).join(','));
-        }
+        $input.val(currentTags.join(','));
+
+        var availableLower = available.map(function (t) {
+            return String(t).toLowerCase();
+        });
 
         $input.tagit({
             availableTags: available,
