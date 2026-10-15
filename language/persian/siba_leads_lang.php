@@ -14,6 +14,7 @@ $lang['siba_leads_kanban_desc'] = 'سرنخ‌ها را با کشیدن و ره�
 $lang['siba_leads_pipeline_board'] = 'برد کاریز';
 $lang['siba_leads_pipeline_board_select'] = 'انتخاب کاریز دیدار';
 $lang['siba_leads_pipeline_board_help'] = 'هر کاریز دیدار ستون‌های خودش را دارد. برای دیدن مراحل همان کاریز، برد را عوض کنید.';
+$lang['siba_leads_lead_pipeline'] = 'کاریز (کانبان)';
 $lang['siba_leads_drag_to_move'] = 'برای جابه‌جایی بین ستون‌ها بکشید';
 $lang['siba_leads_move_failed'] = 'ذخیره جابه‌جایی سرنخ انجام نشد. کارت به جای قبلی برگشت.';
 $lang['siba_leads_move_saving'] = 'در حال ذخیره…';

@@ -14,6 +14,7 @@ $lang['siba_leads_kanban_desc'] = 'Drag leads between statuses. Search, sort, an
 $lang['siba_leads_pipeline_board'] = 'Pipeline board';
 $lang['siba_leads_pipeline_board_select'] = 'Select a Didar pipeline';
 $lang['siba_leads_pipeline_board_help'] = 'Each Didar pipeline has its own columns. Switch boards to see that pipeline’s stages.';
+$lang['siba_leads_lead_pipeline'] = 'Pipeline (kanban)';
 $lang['siba_leads_drag_to_move'] = 'Drag to move between columns';
 $lang['siba_leads_move_failed'] = 'Could not save the lead move. The card was restored.';
 $lang['siba_leads_move_saving'] = 'Saving…';

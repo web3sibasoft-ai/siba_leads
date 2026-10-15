@@ -37,9 +37,11 @@ hooks()->add_filter('before_lead_added', 'siba_leads_filter_inject_pipeline_tag'
 hooks()->add_filter('before_lead_added', 'siba_leads_filter_lead_tags_no_autocreate', 30);
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_inject_pipeline_tag', 28);
 hooks()->add_action('lead_created', 'siba_leads_action_ensure_pipeline_tag', 5);
+hooks()->add_action('lead_created', 'siba_leads_action_apply_requested_pipeline_tag', 6);
 hooks()->add_action('lead_created', 'siba_leads_action_lead_created');
 hooks()->add_action('lead_created', 'siba_leads_action_website_lead_created', 30);
 hooks()->add_action('lead_status_changed', 'siba_leads_action_lead_status_changed_pipeline_tag');
+hooks()->add_action('after_lead_updated', 'siba_leads_action_apply_requested_pipeline_tag', 20);
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_before_email_lead');
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_lead_location_fields', 20);
 hooks()->add_filter('before_insert_lead_from_email_integration', 'siba_leads_filter_profile_fields', 25);
@@ -52,6 +54,7 @@ hooks()->add_action('after_lead_updated', 'siba_leads_action_website_lead_update
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_location_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_profile_seed');
 hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_form_meta_seed');
+hooks()->add_action('lead_modal_profile_bottom', 'siba_leads_lead_modal_pipeline_seed');
 hooks()->add_action('after_lead_tabs_content', 'siba_leads_lead_modal_outcome_banner');
 hooks()->add_action('after_lead_lead_tabs', 'siba_leads_lead_modal_timeline_tab', 5);
 hooks()->add_action('after_lead_tabs_content', 'siba_leads_lead_modal_timeline_pane', 5);
@@ -606,7 +609,7 @@ function siba_leads_load_admin_js()
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMoveFailed = ' . json_encode(_l('siba_leads_move_failed'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261011d') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261015pipeline') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

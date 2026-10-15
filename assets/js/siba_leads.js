@@ -2336,6 +2336,183 @@
         });
     }
 
+    function getLeadPipelineSeed() {
+        return window.sibaLeadPipelineSeed && typeof window.sibaLeadPipelineSeed === 'object'
+            ? window.sibaLeadPipelineSeed
+            : null;
+    }
+
+    function getPipelineTagNameSet() {
+        var seed = getLeadPipelineSeed();
+        var names = seed && Array.isArray(seed.pipeline_tag_names) ? seed.pipeline_tag_names : [];
+        var set = {};
+        names.forEach(function (name) {
+            var key = String(name || '').trim().toLowerCase();
+            if (key) {
+                set[key] = true;
+            }
+        });
+        return set;
+    }
+
+    function filterOutPipelineTagNames(list) {
+        var blocked = getPipelineTagNameSet();
+        return (Array.isArray(list) ? list : []).filter(function (name) {
+            var key = String(name || '').trim().toLowerCase();
+            return key && !blocked[key];
+        });
+    }
+
+    function syncLeadPipelineStatusOptions($modal, statusIds) {
+        var $status = $modal.find('select[name="status"], #status');
+        if (!$status.length || !Array.isArray(statusIds) || !statusIds.length) {
+            return;
+        }
+        var allowed = {};
+        statusIds.forEach(function (id) {
+            allowed[String(id)] = true;
+        });
+        var current = String(getSelectpickerValue($status) || '');
+        if (!allowed[current]) {
+            $status.selectpicker('val', String(statusIds[0]));
+            $status.selectpicker('refresh');
+        }
+    }
+
+    function updateLeadPipelineView($modal) {
+        var seed = getLeadPipelineSeed();
+        if (!seed || !Array.isArray(seed.pipelines) || !seed.pipelines.length) {
+            return;
+        }
+        var labels = seed.labels || {};
+        var $col = $modal.find('.lead-information-col').first();
+        if (!$col.length) {
+            return;
+        }
+
+        var selectedId = String(seed.selected_tag_id || '');
+        var $select = $modal.find('#siba_lead_pipeline_tag');
+        if ($select.length) {
+            selectedId = String(getSelectpickerValue($select) || selectedId);
+        }
+        var selectedName = seed.selected_name || '';
+        seed.pipelines.forEach(function (pipe) {
+            if (String(pipe.tag_id) === selectedId) {
+                selectedName = pipe.name || pipe.tag_name || selectedName;
+            }
+        });
+
+        var $tagsDt = $col.find('dt.lead-field-heading').filter(function () {
+            var text = normalizeLabel($(this).text());
+            return text.indexOf('tag') !== -1 || text.indexOf('برچسب') !== -1;
+        }).first();
+
+        var $pipelineDt = $col.find('dt[data-siba-pipeline="1"]');
+        if (!$pipelineDt.length && $tagsDt.length) {
+            $pipelineDt = $('<dt class="lead-field-heading tw-font-normal tw-text-neutral-500" data-siba-pipeline="1"></dt>');
+            var $pipelineDd = $('<dd class="tw-text-neutral-900 tw-mt-1 mbot10" data-siba-pipeline-value="1"></dd>');
+            $pipelineDt.insertBefore($tagsDt);
+            $pipelineDd.insertAfter($pipelineDt);
+        }
+        if ($pipelineDt.length) {
+            $pipelineDt.text(labels.pipeline || 'Pipeline');
+            $col.find('[data-siba-pipeline-value="1"]').text(selectedName || '—');
+        }
+
+        // Hide pipeline tag chips from the general tags view list.
+        var blocked = getPipelineTagNameSet();
+        $col.find('.tags-labels .label-tag, .tags-labels .tag').each(function () {
+            var label = $.trim($(this).text() || '').toLowerCase();
+            if (blocked[label]) {
+                $(this).addClass('siba-hide-lead-field').hide();
+            }
+        });
+    }
+
+    function injectLeadPipelineSelect($modal) {
+        var seed = getLeadPipelineSeed();
+        var $form = $modal.find('#lead_form');
+        if (!$form.length || !seed || !Array.isArray(seed.pipelines) || !seed.pipelines.length) {
+            return;
+        }
+        if (!canInitLeadLocationFields($modal)) {
+            updateLeadPipelineView($modal);
+            return;
+        }
+
+        var labels = seed.labels || {};
+        var $tagsWrap = $form.find('#inputTagsWrapper').closest('.col-md-12');
+        if (!$tagsWrap.length) {
+            $tagsWrap = $form.find('#inputTagsWrapper').parent();
+        }
+
+        var $existing = $form.find('#siba_lead_pipeline_tag');
+        if ($existing.length) {
+            if (seed.selected_tag_id) {
+                $existing.selectpicker('val', String(seed.selected_tag_id));
+                $existing.selectpicker('refresh');
+            }
+            updateLeadPipelineView($modal);
+            return;
+        }
+
+        var $group = $('<div class="col-md-12 siba-lead-pipeline-select"></div>');
+        var $formGroup = $('<div class="form-group"></div>');
+        $formGroup.append(
+            $('<label class="control-label" for="siba_lead_pipeline_tag"></label>')
+                .html('<i class="fa fa-columns" aria-hidden="true"></i> ' + (labels.pipeline || 'Pipeline'))
+        );
+        var $select = $('<select>', {
+            id: 'siba_lead_pipeline_tag',
+            name: 'siba_pipeline_tag',
+            class: 'form-control selectpicker',
+            'data-width': '100%',
+            'data-none-selected-text': labels.select || ''
+        });
+        seed.pipelines.forEach(function (pipe) {
+            var tagId = String(pipe.tag_id || '');
+            if (!tagId) {
+                return;
+            }
+            var $opt = $('<option></option>')
+                .attr('value', tagId)
+                .text(pipe.name || pipe.tag_name || tagId);
+            if (String(seed.selected_tag_id || '') === tagId) {
+                $opt.prop('selected', true);
+            }
+            $select.append($opt);
+        });
+        $formGroup.append($select);
+        $group.append($formGroup);
+
+        if ($tagsWrap.length) {
+            $group.insertBefore($tagsWrap);
+        } else {
+            $form.prepend($group);
+        }
+
+        mountLocationSelectpicker($select);
+        $select.on('changed.bs.select.sibaPipeline', function () {
+            var tagId = String(getSelectpickerValue($select) || '');
+            var match = null;
+            seed.pipelines.forEach(function (pipe) {
+                if (String(pipe.tag_id) === tagId) {
+                    match = pipe;
+                }
+            });
+            if (match && Array.isArray(match.status_ids)) {
+                syncLeadPipelineStatusOptions($modal, match.status_ids);
+            }
+            if (seed) {
+                seed.selected_tag_id = parseInt(tagId, 10) || 0;
+                seed.selected_name = match ? (match.name || match.tag_name || '') : '';
+            }
+            updateLeadPipelineView($modal);
+        });
+
+        updateLeadPipelineView($modal);
+    }
+
     function restrictLeadModalTagsToExisting($modal) {
         $modal = $modal && $modal.length ? $modal : $('#lead-modal');
         var $input = $modal.find('#inputTagsWrapper input.tagsinput, #inputTagsWrapper #tags');
@@ -2349,6 +2526,41 @@
         var availableIds = (typeof app !== 'undefined' && Array.isArray(app.available_tags_ids))
             ? app.available_tags_ids.slice()
             : [];
+
+        // Keep pipeline tags out of the general tags field.
+        var blocked = getPipelineTagNameSet();
+        if (Object.keys(blocked).length) {
+            var filteredTags = [];
+            var filteredIds = [];
+            available.forEach(function (name, idx) {
+                var key = String(name || '').trim().toLowerCase();
+                if (!blocked[key]) {
+                    filteredTags.push(name);
+                    filteredIds.push(availableIds[idx]);
+                }
+            });
+            available = filteredTags;
+            availableIds = filteredIds;
+
+            try {
+                if ($input.data('ui-tagit')) {
+                    var current = $input.tagit('assignedTags') || [];
+                    filterOutPipelineTagNames(current).forEach(function () { /* collect below */ });
+                    var keep = filterOutPipelineTagNames(current);
+                    $input.tagit('removeAll');
+                    keep.forEach(function (tag) {
+                        $input.tagit('createTag', tag);
+                    });
+                } else {
+                    var raw = String($input.val() || '').split(',');
+                    $input.val(filterOutPipelineTagNames(raw).join(','));
+                }
+            } catch (eStrip) {
+                var rawVal = String($input.val() || '').split(',');
+                $input.val(filterOutPipelineTagNames(rawVal).join(','));
+            }
+        }
+
         var availableLower = available.map(function (t) {
             return String(t).toLowerCase();
         });
@@ -2358,6 +2570,11 @@
                 $input.tagit('destroy');
             }
         } catch (e) { /* ignore */ }
+
+        // Ensure value has no leftover pipeline names before re-init.
+        if (Object.keys(blocked).length) {
+            $input.val(filterOutPipelineTagNames(String($input.val() || '').split(',')).join(','));
+        }
 
         $input.tagit({
             availableTags: available,
@@ -2371,9 +2588,16 @@
             },
             beforeTagAdded: function (event, ui) {
                 if (ui.duringInitialization) {
+                    var initLabel = $.trim(ui.tagLabel || '').toLowerCase();
+                    if (blocked[initLabel]) {
+                        return false;
+                    }
                     return true;
                 }
                 var label = $.trim(ui.tagLabel || '');
+                if (blocked[label.toLowerCase()]) {
+                    return false;
+                }
                 if (availableLower.indexOf(label.toLowerCase()) === -1) {
                     if (typeof alert_float === 'function') {
                         alert_float('warning', window.sibaLeadsTagMustExist || 'Use an existing tag from the list.');
@@ -2439,7 +2663,9 @@
         bindLeadPhoneUnique($modal);
         ensureLeadModalSelectsEnabled($modal);
         markLeadOrderRequiredFields($modal);
+        injectLeadPipelineSelect($modal);
         restrictLeadModalTagsToExisting($modal);
+        updateLeadPipelineView($modal);
 
         // Proposals not used for now — hide tab + pane.
         $modal.find('a[href="#tab_proposals_leads"]').closest('li').addClass('siba-hide-lead-field');
@@ -2576,6 +2802,7 @@
         window.sibaLeadLocationSeed = null;
         window.sibaLeadProfileSeed = null;
         window.sibaLeadFormMetaSeed = null;
+        window.sibaLeadPipelineSeed = null;
         cleanupLocationPickerArtifacts();
     });
 

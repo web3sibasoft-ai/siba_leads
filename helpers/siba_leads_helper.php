@@ -1719,8 +1719,8 @@ function siba_leads_restrict_tags_to_existing($tags)
     }
 
     $existing = function_exists('get_tags_clean') ? get_tags_clean() : [];
-    if (!is_array($existing) || $existing === []) {
-        return $returnArray ? [] : '';
+    if (!is_array($existing)) {
+        $existing = [];
     }
 
     $map = [];
@@ -1730,6 +1730,26 @@ function siba_leads_restrict_tags_to_existing($tags)
             continue;
         }
         $map[function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name)] = $name;
+    }
+
+    // Always allow Didar/kanban pipeline tags even when the tags cache is stale/empty.
+    if (function_exists('siba_leads_didar_list_pipeline_maps')) {
+        foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+            $normalized = siba_leads_normalize_pipeline_tag_map(is_array($row) ? $row : null);
+            if ($normalized === null) {
+                continue;
+            }
+            $name = trim((string) ($normalized['tag_name'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $key = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+            $map[$key] = $name;
+        }
+    }
+
+    if ($map === []) {
+        return $returnArray ? [] : '';
     }
 
     $out = [];
@@ -1815,13 +1835,296 @@ function siba_leads_set_requested_pipeline_status(int $statusId): void
 }
 
 /**
+ * Tag IDs that represent Didar pipeline boards.
+ *
+ * @return int[]
+ */
+function siba_leads_pipeline_tag_ids(): array
+{
+    $ids = [];
+    if (!function_exists('siba_leads_didar_list_pipeline_maps')) {
+        return $ids;
+    }
+    foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+        $id = (int) ($row['tag_id'] ?? 0);
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+
+    return array_values($ids);
+}
+
+/**
+ * Pipeline map for a Perfex tag id, or null.
+ *
+ * @return array<string,mixed>|null
+ */
+function siba_leads_pipeline_map_by_tag_id(int $tagId): ?array
+{
+    if ($tagId < 1 || !function_exists('siba_leads_didar_list_pipeline_maps')) {
+        return null;
+    }
+    foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+        if ((int) ($row['tag_id'] ?? 0) === $tagId) {
+            return is_array($row) ? $row : null;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Options for the lead-edit pipeline select (tag_id + display name).
+ *
+ * @return array<int,array{tag_id:int,name:string,tag_name:string,didar_pipeline_id:string,status_ids:int[]}>
+ */
+function siba_leads_pipeline_options_for_select(): array
+{
+    $options = [];
+    if (!function_exists('siba_leads_didar_list_pipeline_maps')) {
+        return $options;
+    }
+    foreach (siba_leads_didar_list_pipeline_maps() as $row) {
+        $tagId = (int) ($row['tag_id'] ?? 0);
+        if ($tagId < 1) {
+            continue;
+        }
+        $pipeId = trim((string) ($row['didar_pipeline_id'] ?? ''));
+        $title  = trim((string) ($row['title'] ?? ''));
+        $tagName = trim((string) ($row['tag_name'] ?? ''));
+        $statusIds = ($pipeId !== '' && function_exists('siba_leads_didar_get_pipeline_status_ids'))
+            ? siba_leads_didar_get_pipeline_status_ids($pipeId)
+            : [];
+        $options[] = [
+            'tag_id'            => $tagId,
+            'name'              => $title !== '' ? $title : ($tagName !== '' ? $tagName : (string) $tagId),
+            'tag_name'          => $tagName,
+            'didar_pipeline_id' => $pipeId,
+            'status_ids'        => $statusIds,
+        ];
+    }
+
+    return $options;
+}
+
+/**
+ * Pipeline tag currently attached to a lead (first match), or 0.
+ */
+function siba_leads_lead_current_pipeline_tag_id(int $leadId): int
+{
+    if ($leadId < 1) {
+        return 0;
+    }
+    $pipelineIds = siba_leads_pipeline_tag_ids();
+    if ($pipelineIds === []) {
+        return 0;
+    }
+
+    $CI = &get_instance();
+    $taggables = db_prefix() . 'taggables';
+    if (!$CI->db->table_exists($taggables)) {
+        return 0;
+    }
+
+    $row = $CI->db->select('tag_id')
+        ->where('rel_id', $leadId)
+        ->where('rel_type', 'lead')
+        ->where_in('tag_id', $pipelineIds)
+        ->order_by('tag_order', 'ASC')
+        ->limit(1)
+        ->get($taggables)
+        ->row();
+
+    return $row ? (int) $row->tag_id : 0;
+}
+
+/**
+ * Remember lead-form pipeline tag selection (cleared after create/update handlers).
+ */
+function siba_leads_set_requested_pipeline_tag_id(int $tagId): void
+{
+    if ($tagId > 0) {
+        $GLOBALS['siba_leads_requested_pipeline_tag_id'] = $tagId;
+    } else {
+        unset($GLOBALS['siba_leads_requested_pipeline_tag_id']);
+    }
+}
+
+function siba_leads_requested_pipeline_tag_id(): int
+{
+    return (int) ($GLOBALS['siba_leads_requested_pipeline_tag_id'] ?? 0);
+}
+
+/**
+ * Remove pipeline board tag names from a tags string/array.
+ *
+ * @param mixed $tags
+ * @return mixed
+ */
+function siba_leads_strip_pipeline_tags_from_input($tags)
+{
+    $pipelineIds = siba_leads_pipeline_tag_ids();
+    if ($pipelineIds === []) {
+        return $tags;
+    }
+
+    $CI = &get_instance();
+    $pipelineNames = [];
+    foreach ($pipelineIds as $tagId) {
+        $map  = siba_leads_pipeline_map_by_tag_id((int) $tagId);
+        $name = trim((string) ($map['tag_name'] ?? ''));
+        if ($name === '') {
+            $tagRow = $CI->db->select('name')->where('id', (int) $tagId)->get(db_prefix() . 'tags')->row();
+            $name   = $tagRow ? trim((string) $tagRow->name) : '';
+        }
+        if ($name !== '') {
+            $key = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+            $pipelineNames[$key] = true;
+        }
+    }
+    if ($pipelineNames === []) {
+        return $tags;
+    }
+
+    $returnArray = is_array($tags);
+    $list        = $returnArray ? $tags : explode(',', (string) ($tags ?? ''));
+    $out         = [];
+    foreach ($list as $name) {
+        $name = trim((string) $name);
+        if ($name === '') {
+            continue;
+        }
+        $key = function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+        if (isset($pipelineNames[$key])) {
+            continue;
+        }
+        $out[] = $name;
+    }
+
+    return $returnArray ? $out : implode(',', $out);
+}
+
+/**
+ * If lead status is not a column of the selected pipeline, move it to the first stage.
+ */
+function siba_leads_sync_lead_status_to_pipeline(int $leadId, int $pipelineTagId): void
+{
+    if ($leadId < 1 || $pipelineTagId < 1) {
+        return;
+    }
+    $map = siba_leads_pipeline_map_by_tag_id($pipelineTagId);
+    if ($map === null) {
+        return;
+    }
+    $pipeId = trim((string) ($map['didar_pipeline_id'] ?? ''));
+    if ($pipeId === '' || !function_exists('siba_leads_didar_get_pipeline_status_ids')) {
+        return;
+    }
+    $statusIds = siba_leads_didar_get_pipeline_status_ids($pipeId);
+    if ($statusIds === []) {
+        return;
+    }
+
+    $CI  = &get_instance();
+    $row = $CI->db->select('status')->where('id', $leadId)->get(db_prefix() . 'leads')->row();
+    $current = $row ? (int) $row->status : 0;
+    if ($current > 0 && in_array($current, $statusIds, true)) {
+        return;
+    }
+
+    $CI->db->where('id', $leadId)->update(db_prefix() . 'leads', [
+        'status' => (int) $statusIds[0],
+    ]);
+}
+
+/**
+ * Seed pipeline options for the lead modal (separate from general tags).
+ *
+ * @param int|string $lead_id
+ */
+function siba_leads_lead_modal_pipeline_seed($lead_id): void
+{
+    $lead_id  = (int) $lead_id;
+    $options  = siba_leads_pipeline_options_for_select();
+    $selected = 0;
+    if ($lead_id > 0) {
+        $selected = siba_leads_lead_current_pipeline_tag_id($lead_id);
+    }
+    if ($selected < 1 && function_exists('siba_leads_active_pipeline_map')) {
+        $active = siba_leads_active_pipeline_map();
+        $selected = (int) ($active['tag_id'] ?? 0);
+    }
+    if ($selected < 1 && $options !== []) {
+        $selected = (int) ($options[0]['tag_id'] ?? 0);
+    }
+
+    $selectedName = '';
+    foreach ($options as $opt) {
+        if ((int) ($opt['tag_id'] ?? 0) === $selected) {
+            $selectedName = (string) ($opt['name'] ?? '');
+            break;
+        }
+    }
+
+    $payload = [
+        'pipelines'          => $options,
+        'selected_tag_id'    => $selected,
+        'selected_name'      => $selectedName,
+        'pipeline_tag_ids'   => siba_leads_pipeline_tag_ids(),
+        'pipeline_tag_names' => array_values(array_filter(array_map(static function ($opt) {
+            return trim((string) ($opt['tag_name'] ?? ''));
+        }, $options))),
+        'labels'             => [
+            'pipeline' => _l('siba_leads_lead_pipeline'),
+            'select'   => _l('siba_leads_pipeline_board_select'),
+            'tags'     => _l('tags'),
+        ],
+    ];
+
+    echo '<script>window.sibaLeadPipelineSeed = ' . json_encode($payload, JSON_UNESCAPED_UNICODE) . ';</script>';
+}
+
+/**
+ * after_lead_updated / lead_created: honour lead-form pipeline select.
+ *
+ * @param int|array $payload
+ */
+function siba_leads_action_apply_requested_pipeline_tag($payload): void
+{
+    if (!empty($GLOBALS['siba_leads_didar_import'])) {
+        return;
+    }
+
+    $leadId = is_array($payload) ? (int) ($payload['lead_id'] ?? 0) : (int) $payload;
+    $tagId  = siba_leads_requested_pipeline_tag_id();
+    if ($leadId < 1 || $tagId < 1) {
+        unset($GLOBALS['siba_leads_requested_pipeline_tag_id']);
+
+        return;
+    }
+
+    siba_leads_sync_lead_status_to_pipeline($leadId, $tagId);
+    siba_leads_ensure_lead_pipeline_tag($leadId, null);
+    unset($GLOBALS['siba_leads_requested_pipeline_tag_id']);
+}
+
+/**
  * Resolve which pipeline tag a new/manual/API lead should get.
- * Prefer status→pipeline map; else remembered API status; else active board; else first mapped pipeline.
+ * Prefer explicit form selection; else status→pipeline map; else remembered API status; else active board; else first mapped pipeline.
  *
  * @return array{tag_id:int,tag_name:string,didar_pipeline_id:string}|null
  */
 function siba_leads_resolve_pipeline_tag_for_lead(?int $statusId = null): ?array
 {
+    $requestedTagId = siba_leads_requested_pipeline_tag_id();
+    if ($requestedTagId > 0) {
+        $fromRequest = siba_leads_normalize_pipeline_tag_map(siba_leads_pipeline_map_by_tag_id($requestedTagId));
+        if ($fromRequest !== null) {
+            return $fromRequest;
+        }
+    }
+
     $candidates = [];
     if ($statusId !== null && $statusId > 0) {
         $candidates[] = $statusId;
@@ -1913,6 +2216,9 @@ function siba_leads_filter_inject_pipeline_tag($data)
     if (!is_array($data) || !empty($GLOBALS['siba_leads_didar_import'])) {
         return $data;
     }
+
+    // Fresh tag list so restrict_tags_to_existing can keep the pipeline tag name.
+    siba_leads_clear_tags_cache();
 
     $statusId = (int) ($data['status'] ?? 0);
     $data['tags'] = siba_leads_merge_pipeline_tag_into_tags($data['tags'] ?? '', $statusId > 0 ? $statusId : null);
@@ -2006,6 +2312,10 @@ function siba_leads_ensure_lead_pipeline_tag(int $leadId, ?int $statusId = null)
         }
     }
 
+    if ($changed) {
+        siba_leads_clear_tags_cache();
+    }
+
     return $changed;
 }
 
@@ -2046,9 +2356,12 @@ function siba_leads_action_lead_status_changed_pipeline_tag($data): void
         return;
     }
 
-    $CI  = &get_instance();
-    $row = $CI->db->select('status')->where('id', $leadId)->get(db_prefix() . 'leads')->row();
-    $statusId = $row ? (int) $row->status : 0;
+    $statusId = (int) ($data['new_status'] ?? 0);
+    if ($statusId < 1) {
+        $CI  = &get_instance();
+        $row = $CI->db->select('status')->where('id', $leadId)->get(db_prefix() . 'leads')->row();
+        $statusId = $row ? (int) $row->status : 0;
+    }
     if ($statusId < 1) {
         return;
     }
@@ -2080,6 +2393,7 @@ function siba_leads_filter_lead_tags_no_autocreate($data)
 
 /**
  * Sanitize lead POST tags on create/update (covers update path with no before_update filter).
+ * Merges the separate pipeline select into tags and strips pipeline names from the labels field.
  */
 function siba_leads_intercept_lead_tags_post(): void
 {
@@ -2092,10 +2406,24 @@ function siba_leads_intercept_lead_tags_post(): void
     if (!$CI->input->post()) {
         return;
     }
-    if (!array_key_exists('tags', $_POST)) {
+
+    $pipelineTagId = (int) $CI->input->post('siba_pipeline_tag');
+    if ($pipelineTagId > 0 && siba_leads_pipeline_map_by_tag_id($pipelineTagId) !== null) {
+        siba_leads_set_requested_pipeline_tag_id($pipelineTagId);
+    }
+
+    if (!array_key_exists('tags', $_POST) && $pipelineTagId < 1) {
         return;
     }
-    $_POST['tags'] = siba_leads_restrict_tags_to_existing($_POST['tags']);
+
+    $tags = array_key_exists('tags', $_POST) ? $_POST['tags'] : '';
+    $tags = siba_leads_strip_pipeline_tags_from_input($tags);
+    if ($pipelineTagId > 0) {
+        // resolve prefers requested pipeline tag id set above
+        $tags = siba_leads_merge_pipeline_tag_into_tags($tags, null);
+    }
+
+    $_POST['tags'] = siba_leads_restrict_tags_to_existing($tags);
 }
 
 /**
