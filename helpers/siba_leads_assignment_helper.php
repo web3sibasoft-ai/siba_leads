@@ -75,11 +75,18 @@ function siba_leads_next_assignment(array $current = []): array
     $members   = siba_leads_get_team_member_ids('sales', true);
 
     if (empty($members)) {
-        return [
+        // Unassigned — stay in Backlog only when no explicit stage was chosen.
+        // Website/API sends a pipeline status (e.g. 64); do not overwrite it with Backlog.
+        $result = [
             'assigned' => 0,
-            'status'   => $backlogId,
             'mode'     => 'backlog',
         ];
+        $currentStatus = isset($current['status']) ? (int) $current['status'] : 0;
+        if ($currentStatus < 1 || $currentStatus === $backlogId) {
+            $result['status'] = $backlogId;
+        }
+
+        return $result;
     }
 
     if (!isset($GLOBALS['siba_leads_rr_index'])) {
