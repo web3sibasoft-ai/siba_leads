@@ -269,7 +269,46 @@ function siba_leads_didar_pipeline_map_for_status(int $statusId): ?array
         ->get($pipes)
         ->row_array();
 
-    return is_array($row) ? $row : null;
+    if (!is_array($row)) {
+        return null;
+    }
+
+    // Self-heal: pipeline row exists but tag_id was never linked / tag was deleted.
+    $tagId   = (int) ($row['tag_id'] ?? 0);
+    $tagName = trim((string) ($row['tag_name'] ?? ''));
+    $title   = trim((string) ($row['title'] ?? ''));
+    if ($tagName === '' && $title !== '') {
+        $tagName = $title;
+    }
+
+    if ($tagId > 0) {
+        $tagRow = $CI->db->select('id, name')->where('id', $tagId)->get($prefix . 'tags')->row();
+        if (!$tagRow) {
+            $tagId = 0;
+        } else {
+            $row['tag_id']   = (int) $tagRow->id;
+            $row['tag_name'] = trim((string) $tagRow->name);
+
+            return $row;
+        }
+    }
+
+    if ($tagName !== '' && function_exists('siba_leads_didar_ensure_tag_row')) {
+        $ensured = siba_leads_didar_ensure_tag_row($tagName);
+        $newId   = (int) ($ensured['id'] ?? 0);
+        $newName = trim((string) ($ensured['name'] ?? $tagName));
+        if ($newId > 0) {
+            $CI->db->where('id', (int) $row['id'])->update($pipes, [
+                'tag_id'      => $newId,
+                'tag_name'    => $newName,
+                'dateupdated' => date('Y-m-d H:i:s'),
+            ]);
+            $row['tag_id']   = $newId;
+            $row['tag_name'] = $newName;
+        }
+    }
+
+    return $row;
 }
 
 /**

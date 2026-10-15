@@ -2300,6 +2300,12 @@ function siba_leads_ensure_lead_pipeline_tag(int $leadId, ?int $statusId = null)
     }
 
     $resolved = siba_leads_resolve_pipeline_tag_for_lead($statusId > 0 ? $statusId : null);
+
+    // Last resort: direct status → stage → pipeline.tag_id (bypasses session/fallback gaps).
+    if ($resolved === null && $statusId > 0 && function_exists('siba_leads_didar_pipeline_map_for_status')) {
+        $resolved = siba_leads_normalize_pipeline_tag_map(siba_leads_didar_pipeline_map_for_status($statusId));
+    }
+
     if ($resolved === null) {
         return false;
     }
