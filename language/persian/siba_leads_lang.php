@@ -154,29 +154,29 @@ $lang['siba_leads_reports'] = 'گزارش‌های لید';
 $lang['siba_leads_reports_desc'] = 'تحلیل معاملات: ورودی، مراحل کاریز، نرخ و سرعت تبدیل، شیوه آشنایی، دلایل شکست و ارزش فروش.';
 $lang['siba_leads_reports_registered'] = 'معاملات ورودی';
 $lang['siba_leads_reports_incoming'] = 'معاملات ورودی';
-$lang['siba_leads_reports_incoming_desc'] = 'گزارش حجم و روند معاملات ورودی با امکان بررسی وضعیت‌های باز، موفق و شکست‌خورده بر اساس بازه زمانی یا کارشناسان فروش.';
+$lang['siba_leads_reports_incoming_desc'] = 'سرنخ‌هایی که در بازه انتخابی ثبت شده‌اند (dateadded)، با وضعیت فعلی: جاری / موفق (siba_outcome=success یا date_converted) / ناموفق (lost یا siba_outcome=failed). محور: زمان یا مسئول (assigned).';
 $lang['siba_leads_reports_analysis'] = 'تحلیل معاملات';
-$lang['siba_leads_reports_analysis_desc'] = 'تحلیل جامع و همه‌جانبه معاملات شامل تفکیک ورودی‌ها، موفقیت‌ها، شکست‌ها و ارزش کلی معاملات.';
+$lang['siba_leads_reports_analysis_desc'] = 'همان منطق معاملات ورودی با خلاصه کامل‌تر.';
 $lang['siba_leads_reports_pipeline'] = 'معاملات در مراحل کاریز';
-$lang['siba_leads_reports_pipeline_desc'] = 'پراکندگی و تعداد سرنخ‌های جاری که در حال حاضر در هر یک از مراحل و ستون‌های کاریز فروش قرار دارند.';
+$lang['siba_leads_reports_pipeline_desc'] = 'عکس لحظه‌ای از فیلد status فعلی (ستون کانبان) + سطل جدا برای lost؛ junk حذف می‌شود. فیلتر تاریخ روی dateadded است.';
 $lang['siba_leads_reports_speed'] = 'سرعت تبدیل';
-$lang['siba_leads_reports_speed_desc'] = 'میانگین زمان (روز) صرف‌شده از لحظه ثبت سرنخ تا نهایی‌سازی و تبدیل موفق آن به مشتری یا سفارش.';
+$lang['siba_leads_reports_speed_desc'] = 'فقط فروش‌های موفق؛ روز = از dateadded تا تاریخ فروش (اول siba_outcome_at، وگرنه date_converted). فیلتر تاریخ روی تاریخ فروش است.';
 $lang['siba_leads_reports_staff'] = 'عملکرد کارکنان';
-$lang['siba_leads_reports_staff_desc'] = 'مقایسه آماری عملکرد کارشناسان از نظر تعداد لیدهای دریافتی، تعداد فروش‌های موفق و نرخ تبدیل نهایی.';
+$lang['siba_leads_reports_staff_desc'] = 'به ازای هر مسئول (assigned): تعداد ثبت‌شده/موفق/ناموفق/باز از منطق ورودی + میانگین روز تا فروش از گزارش سرعت.';
 $lang['siba_leads_reports_aging'] = 'ماندن لیدهای باز';
-$lang['siba_leads_reports_aging_desc'] = 'بررسی کهنگی و مدت زمان توقف لیدهای باز در ستون‌ها بر اساس بازه‌های زمانی (۰ تا ۲ روز، ۳ تا ۷ روز، ۸ تا ۱۴ روز، ۱۵ تا ۳۰ روز و بیش از ۳۰ روز).';
+$lang['siba_leads_reports_aging_desc'] = 'فقط کارت‌های باز کانبان؛ روز = ماندن در ستون فعلی از last_status_change (یا dateadded) تا الان — نه کل عمر لید.';
 $lang['siba_leads_reports_response'] = 'زمان اولین پاسخ';
-$lang['siba_leads_reports_response_desc'] = 'سنجش سرعت پاسخگویی کارشناسان و میانگین مدت زمان سپری‌شده از ایجاد لید تا برقراری اولین تماس و درصد پاسخگویی.';
+$lang['siba_leads_reports_response_desc'] = 'فاصله dateadded تا فیلد lastcontact پرفکس (آخرین تماس، نه لزوماً اولین). فیلتر تاریخ روی تاریخ ثبت است.';
 $lang['siba_leads_reports_sources'] = 'شیوه آشنایی معاملات ورودی';
-$lang['siba_leads_reports_sources_desc'] = 'توزیع و سهم هر یک از کانال‌ها و شیوه‌های آشنایی سرنخ‌های ورودی در طول زمان.';
+$lang['siba_leads_reports_sources_desc'] = 'تعداد سرنخ‌های ثبت‌شده بر اساس فیلد source (شیوه آشنایی)، روی محور زمان یا خود منبع. junk حذف می‌شود.';
 $lang['siba_leads_reports_sales'] = 'تحلیل فروش';
-$lang['siba_leads_reports_sales_desc'] = 'بررسی ارزش ریالی/مالی فروش و تعداد معاملات محقق‌شده در دوره‌های زمانی مختلف.';
+$lang['siba_leads_reports_sales_desc'] = 'فروش‌های موفق با تاریخ فروش و lead_value.';
 $lang['siba_leads_reports_failures'] = 'دلایل شکست معاملات ورودی';
-$lang['siba_leads_reports_failures_desc'] = 'تحلیل فراوانی و علل شکست یا از دست رفتن معاملات ورودی بر اساس بازه زمانی، دلایل ثبت‌شده، کارشناس یا ستون کاریز.';
+$lang['siba_leads_reports_failures_desc'] = 'سرنخ‌های lost یا siba_outcome=failed با دلیل siba_failure_reason_id. فیلتر تاریخ روی dateadded است؛ محور مراحل از siba_failed_from_status است.';
 $lang['siba_leads_reports_conversion'] = 'نرخ تبدیل';
-$lang['siba_leads_reports_conversion_desc'] = 'محاسبه نرخ و درصد تبدیل سرنخ‌های ورودی به معامله موفق/مشتری در طول زمان یا به تفکیک کارشناسان.';
+$lang['siba_leads_reports_conversion_desc'] = 'همان جمعیت ورودی: نرخ = فروش‌های موفق ÷ همه ثبت‌شده‌ها × ۱۰۰. فیلتر روی dateadded؛ محور زمان یا مسئول.';
 $lang['siba_leads_reports_stage_time'] = 'میانگین ماندگاری در ستون‌ها';
-$lang['siba_leads_reports_stage_time_desc'] = 'میانگین روزهایی که لیدها در هر ستون کاریز می‌مانند (کارت‌های باز + ماندگاری‌های تمام‌شده).';
+$lang['siba_leads_reports_stage_time_desc'] = 'میانگین روز در هر ستون: کارت‌های باز فعلی (از last_status_change) + ماندن‌های تمام‌شده از لاگ تغییر وضعیت کانبان.';
 $lang['siba_leads_reports_stage_open_cards'] = 'کارت‌های باز';
 $lang['siba_leads_reports_stage_completed_stays'] = 'ماندن‌های تکمیل‌شده';
 $lang['siba_leads_reports_col_avg_days_in_column'] = 'میانگین روز در ستون';
@@ -187,9 +187,9 @@ $lang['siba_leads_reports_aging_3_7'] = '۳–۷ روز';
 $lang['siba_leads_reports_aging_8_14'] = '۸–۱۴ روز';
 $lang['siba_leads_reports_aging_15_30'] = '۱۵–۳۰ روز';
 $lang['siba_leads_reports_aging_31'] = '۳۱+ روز';
-$lang['siba_leads_reports_col_contacted'] = 'تماس‌گرفته';
-$lang['siba_leads_reports_col_contacted_rate'] = 'درصد تماس';
-$lang['siba_leads_reports_col_avg_response_days'] = 'میانگین روز تا اولین تماس';
+$lang['siba_leads_reports_col_contacted'] = 'دارای lastcontact';
+$lang['siba_leads_reports_col_contacted_rate'] = 'درصد دارای تماس';
+$lang['siba_leads_reports_col_avg_response_days'] = 'میانگین روز تا lastcontact';
 $lang['siba_leads_reports_date_bucket'] = 'تجمیع تاریخ';
 $lang['siba_leads_reports_bucket_day'] = 'روزانه';
 $lang['siba_leads_reports_bucket_week'] = 'هفتگی';
@@ -238,7 +238,7 @@ $lang['siba_leads_reports_date_to'] = 'تا تاریخ';
 $lang['siba_leads_reports_chart'] = 'نمودار';
 $lang['siba_leads_reports_chart_total'] = 'جمع کل';
 $lang['siba_leads_reports_axis_time'] = 'بر محور زمان';
-$lang['siba_leads_reports_axis_users'] = 'بر محور کاربران';
+$lang['siba_leads_reports_axis_users'] = 'بر محور مسئول سرنخ';
 $lang['siba_leads_reports_axis_source'] = 'بر محور شیوه آشنایی';
 $lang['siba_leads_reports_axis_reason'] = 'بر محور دلایل';
 $lang['siba_leads_reports_axis_pipeline'] = 'بر محور مراحل کاریز';
@@ -253,14 +253,18 @@ $lang['siba_leads_reports_location_none'] = 'بدون مکان';
 $lang['siba_leads_reports_stack_open'] = 'جاری';
 $lang['siba_leads_reports_stack_success'] = 'موفق';
 $lang['siba_leads_reports_stack_failed'] = 'ناموفق';
-$lang['siba_leads_reports_all_users'] = 'همه کاربران';
+$lang['siba_leads_reports_all_users'] = 'همه مسئول‌ها';
 $lang['siba_leads_reports_fx_rate'] = 'نرخ تسعیر';
 $lang['siba_leads_reports_guide'] = 'راهنما';
+$lang['siba_leads_reports_guide_title'] = 'راهنمای نمودار این صفحه';
+$lang['siba_leads_reports_guide_close'] = 'بستن';
+$lang['siba_leads_reports_guide_example'] = 'مثال';
 $lang['siba_leads_reports_print'] = 'چاپ';
 $lang['siba_leads_reports_all_sources'] = 'همه شیوه‌های آشنایی';
 $lang['siba_leads_reports_all_tags'] = 'همه برچسب‌ها';
 $lang['siba_leads_reports_no_tag'] = 'بدون برچسب';
-$lang['siba_leads_reports_guide_body'] = 'از منوی سمت راست بین «معاملات ورودی» و «نرخ تبدیل» جابه‌جا شوید. محور زمان/مکان (ورودی) یا زمان/کاربران (نرخ تبدیل) را انتخاب کنید و با کاربر، شیوه آشنایی، برچسب و بازه فیلتر کنید.';
+$lang['siba_leads_reports_guide_body'] = 'هر گزارش از فیلدها و دکمه‌های واقعی سیبا/پرفکس ساخته می‌شود. فیلتر «مسئول» = فیلد assigned. دکمه راهنما در هر صفحه دقیقاً می‌گوید کدام رفتار نرم‌افزار در محاسبه دخیل است.';
+$lang['siba_leads_reports_menu'] = 'گزارش‌ها';
 $lang['siba_leads_reports_metric_count'] = 'تعداد';
 $lang['siba_leads_reports_metric_amount'] = 'مبلغ';
 $lang['siba_leads_reports_select_all'] = 'انتخاب همه';
@@ -268,6 +272,98 @@ $lang['siba_leads_reports_deselect_all'] = 'حذف انتخاب';
 $lang['siba_leads_reports_all_groups'] = 'همه گروه‌ها';
 $lang['siba_leads_reports_all_units'] = 'همه واحدها';
 $lang['siba_leads_reports_filter_all'] = 'همه';
+
+/* Per-report help: software process + formula + example */
+$lang['siba_leads_reports_help_incoming'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'هر بار سرنخ با فرم دستی، CSV، API، وب‌سایت یا ایمیل <u>ساخته</u> شود، <code>dateadded</code> می‌خورد. مسئول با فیلد <code>assigned</code> مشخص می‌شود. اعلام موفقیت → <code>siba_outcome=success</code> (و/یا تبدیل مشتری پرفکس با <code>date_converted</code>). اعلام شکست از کارت/فرم → <code>siba_outcome=failed</code> و <code>lost=1</code>.</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'جمعیت = سرنخ‌های غیر junk با <code>dateadded</code> داخل فیلتر. هر سرنخ الان در یکی از سه سطل است:<br>'
+. '• موفق: <code>siba_outcome=success</code> یا <code>date_converted</code> معتبر<br>'
+. '• ناموفق: <code>lost=1</code> یا <code>siba_outcome=failed</code><br>'
+. '• جاری: هیچ‌کدام از دو مورد بالا<br>'
+. 'محور زمان = سطل‌بندی <code>dateadded</code>. محور مسئول = گروه‌بندی روی <code>assigned</code>.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'هفته قبل ۲۰ سرنخ ثبت شد؛ الان ۱۰ تا موفق، ۲ تا شکست، ۸ تا هنوز روی کانبان → ستون آن هفته ارتفاع ۲۰ با سه رنگ.</p>';
+
+$lang['siba_leads_reports_help_sources'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'هنگام ساخت سرنخ، فیلد <code>source</code> (شیوه آشنایی: سایت، اینستاگرام، …) ست می‌شود. تغییر بعدی منبع در پروفایل همان فیلد را عوض می‌کند.</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'تعداد سرنخ‌های غیر junk بر اساس <code>dateadded</code> و <code>source</code>. محور زمان = پشته رنگ‌ها برای هر منبع در هر بازه. محور شیوه آشنایی = یک ستون به ازای هر منبع.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. '۴۰ لید با source=سایت و ۱۰ لید با source=اینستاگرام → ستون سایت چهار برابر بلندتر است.</p>';
+
+$lang['siba_leads_reports_help_failures'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'دکمه «اعلام شکست» روی لید: دلیل از فهرست دلایل شکست انتخاب می‌شود، <code>siba_failure_reason_id</code> ذخیره می‌شود، ستون فعلی در <code>siba_failed_from_status</code> نگه‌داری می‌شود، سپس <code>lost=1</code> و <code>status=0</code> (از کانبان خارج).</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'فقط لیدهایی با <code>lost=1</code> یا <code>siba_outcome=failed</code>. گروه‌بندی با دلیل. فیلتر تاریخ روی <code>dateadded</code> است (نه تاریخ شکست). محور مراحل = <code>siba_failed_from_status</code> (ستونی که موقع شکست در آن بوده)، نه status فعلی.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. '۱۸ شکست با دلیل «قیمت» از ۳۰ شکست → حدود ۶۰٪ دایره همان دلیل است.</p>';
+
+$lang['siba_leads_reports_help_conversion'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'همان جمعیت «معاملات ورودی»: ثبت با <code>dateadded</code>، موفقیت با اعلام موفق سیبا یا تبدیل مشتری پرفکس.</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'نرخ = (تعداد موفق ÷ همه ثبت‌شده در همان سطل) × ۱۰۰. فیلتر تاریخ روی <code>dateadded</code>. محور زمان یا مسئول (<code>assigned</code>). نمودار خطی درصد است.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'علی ۵۰ لید ثبت‌شده و ۱۰ موفق دارد → نرخ ۲۰٪.</p>';
+
+$lang['siba_leads_reports_help_pipeline'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'جابه‌جایی کارت روی کانبان فیلد <code>status</code> (ستون کاریز) را عوض می‌کند و معمولاً <code>last_status_change</code> را به‌روز می‌کند. اعلام شکست کارت را از ستون خارج می‌کند (<code>lost=1</code>).</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'عکس لحظه‌ای: شمارش بر اساس <code>status</code> فعلی + سطل جدا برای lost. junk حذف می‌شود. فیلتر تاریخ روی <code>dateadded</code> است (کدام لیدها در نمونه باشند)، ولی محور نمودار خودِ ستون فعلی است — نه روند زمانی.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'اگر نصف دایره «پیشنهاد» باشد، الان بیشترین کارت باز روی همان ستون است.</p>';
+
+$lang['siba_leads_reports_help_stage_time'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'کشیدن کارت بین ستون‌ها لاگ فعالیت «به‌روزرسانی وضعیت» می‌سازد و <code>last_status_change</code> را ست می‌کند.</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'دو بخش روی هر ستون:<br>'
+. '• کارت‌های باز کانبان: روز از <code>last_status_change</code> (یا <code>dateadded</code>) تا الان<br>'
+. '• ماندن تکمیل‌شده: از لاگ تغییر وضعیت، فاصله ورود تا خروج از آن ستون<br>'
+. 'میانگین نمودار ترکیب هر دو نمونه است. فیلتر تاریخ برای بازها روی زمان ورود به ستون، برای لاگ‌ها روی تاریخ لاگ است.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'ستون مذاکره میانگین ۱۲ روز و تماس اول ۲ روز → گلوگاه مذاکره است.</p>';
+
+$lang['siba_leads_reports_help_speed'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'فروش موفق وقتی ثبت می‌شود که کاربر «موفق» اعلام کند (<code>siba_outcome_at</code>) یا لید در پرفکس به مشتری تبدیل شود (<code>date_converted</code>).</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'فقط لیدهایی با تاریخ فروش معتبر. روز = <code>DATEDIFF(تاریخ_فروش, dateadded)</code> که تاریخ فروش اول <code>siba_outcome_at</code> است و اگر نبود <code>date_converted</code>. فیلتر بازه روی <u>تاریخ فروش</u> است (نه تاریخ ثبت). محور: زمان / مسئول / منبع.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'ثبت ۱ فروردین، اعلام موفق ۸ فروردین → ۷ روز.</p>';
+
+$lang['siba_leads_reports_help_staff'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'مسئول = فیلد <code>assigned</code> روی کارت (اختصاص دستی یا تخصیص خودکار واحد فروش).</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'برای هر مسئول:<br>'
+. '• تعداد لید / موفق / ناموفق / باز = همان منطق «معاملات ورودی» با فیلتر روی <code>dateadded</code><br>'
+. '• نرخ تبدیل = موفق ÷ کل<br>'
+. '• میانگین روز تا فروش = از گزارش سرعت (فیلتر آن بخش روی تاریخ فروش است)<br>'
+. 'پس در یک بازه تاریخی، تعداد لیدها و میانگین سرعت لزوماً از یک لحظهٔ زمانی یکسان نیستند.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'رضا ۱۰۰ لید و ۱۰ فروش (۱۰٪)؛ سارا ۴۰ لید و ۱۲ فروش (۳۰٪) → سارا تبدیل بهتری دارد.</p>';
+
+$lang['siba_leads_reports_help_aging'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'کارت روی کانبان است تا وقتی lost/junk نباشد و به مشتری تبدیل نشده باشد. هر جابه‌جایی ستون، <code>last_status_change</code> را عوض می‌کند.</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'فقط لیدهای باز کانبان. روز = ماندن در <u>ستون فعلی</u> از <code>last_status_change</code> (اگر خالی: <code>dateadded</code>) تا الان. سپس در بازه‌های ۰–۲ / ۳–۷ / ۸–۱۴ / ۱۵–۳۰ / ۳۱+ روز دسته‌بندی می‌شود. این «کل عمر باز بودن از روز ثبت» نیست.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'لید ۲۰ روزه که ۳ روز پیش به «پیشنهاد» آمده → در ستون پیشنهاد بازه ۳–۷ روز.</p>';
+
+$lang['siba_leads_reports_help_response'] = ''
+. '<p><strong>۱) رفتار نرم‌افزار</strong><br>'
+. 'در پرفکس وقتی برای لید تماس/تاریخ تماس ثبت می‌شود، فیلد <code>lastcontact</code> به‌روز می‌شود (همان «آخرین تماس» در پروفایل لید).</p>'
+. '<p><strong>۲) معیار گزارش</strong><br>'
+. 'روز = <code>DATEDIFF(lastcontact, dateadded)</code>. بدون <code>lastcontact</code> = تماس‌نگرفته. فیلتر تاریخ روی <code>dateadded</code>. محور مسئول = <code>assigned</code>. چون فیلد آخرین تماس است، تماس دوم تاریخ را جلو می‌برد و فاصله بزرگ‌تر می‌شود — لزوماً «اولین تماس» واقعی نیست.</p>'
+. '<p><strong>۳) مثال</strong><br>'
+. 'ثبت شنبه، تماس سه‌شنبه → ۳ روز؛ تماس دوباره جمعه → فاصله تا جمعه حساب می‌شود.</p>';
 
 $lang['siba_leads_failed'] = 'لیدهای شکست‌خورده';
 $lang['siba_leads_failed_desc'] = 'سرنخ‌هایی که با دلیل مشخص شکست خورده‌اند و دیگر در کانبان نیستند.';

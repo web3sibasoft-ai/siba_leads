@@ -154,29 +154,29 @@ $lang['siba_leads_reports'] = 'Lead reports';
 $lang['siba_leads_reports_desc'] = 'Deal analytics: incoming volume, pipeline stages, conversion, speed, sources, failures, and sales value.';
 $lang['siba_leads_reports_registered'] = 'Incoming deals';
 $lang['siba_leads_reports_incoming'] = 'Incoming deals';
-$lang['siba_leads_reports_incoming_desc'] = 'Volume and trend of incoming deals, broken down by open, won, and failed status across time or assigned staff.';
+$lang['siba_leads_reports_incoming_desc'] = 'Leads registered in the period (dateadded), split by current outcome: open / won (siba_outcome=success or date_converted) / lost (lost or siba_outcome=failed). Axis: time or assigned.';
 $lang['siba_leads_reports_analysis'] = 'Deal analysis';
-$lang['siba_leads_reports_analysis_desc'] = 'Comprehensive lifecycle analysis of deals including incoming volume, wins, losses, and revenue.';
+$lang['siba_leads_reports_analysis_desc'] = 'Same logic as incoming deals with a fuller summary.';
 $lang['siba_leads_reports_pipeline'] = 'Deals in pipeline stages';
-$lang['siba_leads_reports_pipeline_desc'] = 'Volume and distribution of active deals currently residing in each pipeline stage.';
+$lang['siba_leads_reports_pipeline_desc'] = 'Snapshot of current status (kanban column) plus a separate lost bucket; junk excluded. Date filter uses dateadded.';
 $lang['siba_leads_reports_speed'] = 'Conversion speed';
-$lang['siba_leads_reports_speed_desc'] = 'Average duration (in days) from lead creation until successful conversion into a customer.';
+$lang['siba_leads_reports_speed_desc'] = 'Won deals only; days from dateadded to sale date (siba_outcome_at first, else date_converted). Date filter uses sale date.';
 $lang['siba_leads_reports_staff'] = 'Staff performance';
-$lang['siba_leads_reports_staff_desc'] = 'Comparative performance metrics per staff member covering assigned leads, won sales, and conversion rate.';
+$lang['siba_leads_reports_staff_desc'] = 'Per assigned owner: registered/won/lost/open from incoming logic + avg days to sale from speed report.';
 $lang['siba_leads_reports_aging'] = 'Open lead aging';
-$lang['siba_leads_reports_aging_desc'] = 'Aging distribution of open leads in each pipeline stage across age buckets (0–2, 3–7, 8–14, 15–30, and 31+ days).';
+$lang['siba_leads_reports_aging_desc'] = 'Open kanban cards only; days = time in current column from last_status_change (or dateadded) until now — not total lifetime open.';
 $lang['siba_leads_reports_response'] = 'First response time';
-$lang['siba_leads_reports_response_desc'] = 'First response speed measuring average days from lead creation to initial contact and overall contacted rate.';
+$lang['siba_leads_reports_response_desc'] = 'Days from dateadded to Perfex lastcontact (last contact, not necessarily first). Date filter uses dateadded.';
 $lang['siba_leads_reports_sources'] = 'Incoming deal sources';
-$lang['siba_leads_reports_sources_desc'] = 'Distribution and proportion of incoming deals across acquisition channels and sources over time.';
+$lang['siba_leads_reports_sources_desc'] = 'Registered lead counts by source field, on time or source axis. Junk excluded.';
 $lang['siba_leads_reports_sales'] = 'Sales analysis';
-$lang['siba_leads_reports_sales_desc'] = 'Total sales monetary value and volume of won deals across time intervals.';
+$lang['siba_leads_reports_sales_desc'] = 'Won deals by sale date and lead_value.';
 $lang['siba_leads_reports_failures'] = 'Incoming failure reasons';
-$lang['siba_leads_reports_failures_desc'] = 'Analysis of lost deals and failure reasons across time, assigned staff, and pipeline stages.';
+$lang['siba_leads_reports_failures_desc'] = 'lost or siba_outcome=failed leads with siba_failure_reason_id. Date filter uses dateadded; stage axis uses siba_failed_from_status.';
 $lang['siba_leads_reports_conversion'] = 'Conversion rate';
-$lang['siba_leads_reports_conversion_desc'] = 'Conversion rate of incoming leads into successful deals/customers over time or by sales rep.';
+$lang['siba_leads_reports_conversion_desc'] = 'Same incoming population: rate = won ÷ all registered × 100. Date filter on dateadded; axis time or assigned.';
 $lang['siba_leads_reports_stage_time'] = 'Avg time in columns';
-$lang['siba_leads_reports_stage_time_desc'] = 'Average days leads remain in each pipeline column (open cards + completed stays).';
+$lang['siba_leads_reports_stage_time_desc'] = 'Avg days per column: current open cards (from last_status_change) + completed stays from status-change activity log.';
 $lang['siba_leads_reports_stage_open_cards'] = 'Open cards';
 $lang['siba_leads_reports_stage_completed_stays'] = 'Completed stays';
 $lang['siba_leads_reports_col_avg_days_in_column'] = 'Avg days in column';
@@ -187,9 +187,9 @@ $lang['siba_leads_reports_aging_3_7'] = '3–7 days';
 $lang['siba_leads_reports_aging_8_14'] = '8–14 days';
 $lang['siba_leads_reports_aging_15_30'] = '15–30 days';
 $lang['siba_leads_reports_aging_31'] = '31+ days';
-$lang['siba_leads_reports_col_contacted'] = 'Contacted';
+$lang['siba_leads_reports_col_contacted'] = 'Has lastcontact';
 $lang['siba_leads_reports_col_contacted_rate'] = 'Contacted %';
-$lang['siba_leads_reports_col_avg_response_days'] = 'Avg. days to first contact';
+$lang['siba_leads_reports_col_avg_response_days'] = 'Avg days to lastcontact';
 $lang['siba_leads_reports_date_bucket'] = 'Date grouping';
 $lang['siba_leads_reports_bucket_day'] = 'By day';
 $lang['siba_leads_reports_bucket_week'] = 'By week';
@@ -238,7 +238,7 @@ $lang['siba_leads_reports_date_to'] = 'To date';
 $lang['siba_leads_reports_chart'] = 'Chart';
 $lang['siba_leads_reports_chart_total'] = 'Total';
 $lang['siba_leads_reports_axis_time'] = 'By time';
-$lang['siba_leads_reports_axis_users'] = 'By users';
+$lang['siba_leads_reports_axis_users'] = 'By assigned owner';
 $lang['siba_leads_reports_axis_source'] = 'By acquisition source';
 $lang['siba_leads_reports_axis_reason'] = 'By reasons';
 $lang['siba_leads_reports_axis_pipeline'] = 'By pipeline stages';
@@ -253,14 +253,17 @@ $lang['siba_leads_reports_location_none'] = 'No location';
 $lang['siba_leads_reports_stack_open'] = 'Open';
 $lang['siba_leads_reports_stack_success'] = 'Won';
 $lang['siba_leads_reports_stack_failed'] = 'Lost';
-$lang['siba_leads_reports_all_users'] = 'All users';
+$lang['siba_leads_reports_all_users'] = 'All assigned owners';
 $lang['siba_leads_reports_fx_rate'] = 'Exchange rate';
 $lang['siba_leads_reports_guide'] = 'Guide';
+$lang['siba_leads_reports_guide_title'] = 'Chart guide for this page';
+$lang['siba_leads_reports_guide_close'] = 'Close';
+$lang['siba_leads_reports_guide_example'] = 'Example';
 $lang['siba_leads_reports_print'] = 'Print';
 $lang['siba_leads_reports_all_sources'] = 'All acquisition sources';
 $lang['siba_leads_reports_all_tags'] = 'All tags';
 $lang['siba_leads_reports_no_tag'] = 'Untagged';
-$lang['siba_leads_reports_guide_body'] = 'Switch between Incoming deals and Conversion rate. Use time/location (incoming) or time/users (conversion) axes, then filter by user, source, tags, and date range.';
+$lang['siba_leads_reports_guide_body'] = 'Each report maps to real Siba/Perfex fields and actions. The “owner” filter is assigned — not creator or last editor. Open Guide on each page for the exact software behavior used.';
 $lang['siba_leads_reports_menu'] = 'Reports';
 $lang['siba_leads_reports_metric_count'] = 'Count';
 $lang['siba_leads_reports_metric_amount'] = 'Amount';
@@ -269,6 +272,87 @@ $lang['siba_leads_reports_deselect_all'] = 'Deselect all';
 $lang['siba_leads_reports_all_groups'] = 'All groups';
 $lang['siba_leads_reports_all_units'] = 'All units';
 $lang['siba_leads_reports_filter_all'] = 'All';
+
+/* Per-report help: software process + formula + example */
+$lang['siba_leads_reports_help_incoming'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Creating a lead (manual, CSV, API, website, email) sets <code>dateadded</code>. Owner is <code>assigned</code>. Mark success → <code>siba_outcome=success</code> (and/or Perfex convert with <code>date_converted</code>). Mark failed → <code>siba_outcome=failed</code> and <code>lost=1</code>.</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Population = non-junk leads with <code>dateadded</code> in range. Each lead is currently: won (<code>siba_outcome=success</code> or valid <code>date_converted</code>), lost (<code>lost=1</code> or <code>siba_outcome=failed</code>), or open (neither). Time axis buckets <code>dateadded</code>; owner axis groups by <code>assigned</code>.</p>'
+. '<p><strong>3) Example</strong><br>'
+. '20 leads created last week; now 10 won, 2 failed, 8 still on kanban → that week’s column height is 20 with three colors.</p>';
+
+$lang['siba_leads_reports_help_sources'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'On create (or edit), the lead <code>source</code> field stores acquisition channel.</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Counts non-junk leads by <code>dateadded</code> × <code>source</code>. Time axis stacks sources per period; source axis is one column per source.</p>'
+. '<p><strong>3) Example</strong><br>'
+. '40 website vs 10 Instagram → website column is 4× taller.</p>';
+
+$lang['siba_leads_reports_help_failures'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. '“Mark failed” stores <code>siba_failure_reason_id</code>, keeps the column in <code>siba_failed_from_status</code>, then sets <code>lost=1</code> and <code>status=0</code> (leaves kanban).</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Only <code>lost=1</code> or <code>siba_outcome=failed</code>. Grouped by reason. Date filter uses <code>dateadded</code> (not failure time). Stage axis uses <code>siba_failed_from_status</code>, not current status.</p>'
+. '<p><strong>3) Example</strong><br>'
+. '18 of 30 failures = “price” → ~60% of the pie.</p>';
+
+$lang['siba_leads_reports_help_conversion'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Same as incoming: create sets <code>dateadded</code>; win via Siba success or Perfex convert.</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Rate = (won ÷ all registered in that bucket) × 100. Date filter on <code>dateadded</code>. Axis: time or <code>assigned</code>. Chart is a % line.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Ali: 50 registered, 10 won → 20%.</p>';
+
+$lang['siba_leads_reports_help_pipeline'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Dragging a kanban card changes <code>status</code> and usually <code>last_status_change</code>. Mark failed removes the card (<code>lost=1</code>).</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Snapshot by current <code>status</code> plus a lost bucket; junk excluded. Date filter uses <code>dateadded</code> to include leads, but the chart axis is current column — not a time trend.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Half the pie on “Proposal” → most open cards sit there now.</p>';
+
+$lang['siba_leads_reports_help_stage_time'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Moving cards between columns writes status-update activity and sets <code>last_status_change</code>.</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Per column: open cards = days from <code>last_status_change</code> (or <code>dateadded</code>) to now; completed stays = enter→leave from activity log. Chart average mixes both samples.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Negotiation avg 12 days vs first contact 2 → bottleneck is negotiation.</p>';
+
+$lang['siba_leads_reports_help_speed'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'A win is recorded when the user marks success (<code>siba_outcome_at</code>) or converts to customer (<code>date_converted</code>).</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Only leads with a sale date. Days = DATEDIFF(sale_date, dateadded) where sale_date prefers <code>siba_outcome_at</code> then <code>date_converted</code>. Date filter uses <u>sale date</u>. Axis: time / assigned / source.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Created day 1, marked success day 8 → 7 days.</p>';
+
+$lang['siba_leads_reports_help_staff'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Owner is the lead <code>assigned</code> field (manual or auto-assign).</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Per owner: counts from incoming logic (date filter on <code>dateadded</code>); avg days to sale from speed (that part filters on sale date). Those two date bases can differ in one range.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Reza 100 leads / 10 wins (10%); Sara 40 / 12 (30%) → Sara converts better.</p>';
+
+$lang['siba_leads_reports_help_aging'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'A card stays on kanban while not lost/junk and not converted. Column moves update <code>last_status_change</code>.</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Open kanban leads only. Days = time in <u>current column</u> from <code>last_status_change</code> (else <code>dateadded</code>) until now, then bucketed 0–2 / 3–7 / 8–14 / 15–30 / 31+. Not total lifetime since create.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Lead created 20 days ago, moved to Proposal 3 days ago → ages in Proposal’s 3–7 bucket.</p>';
+
+$lang['siba_leads_reports_help_response'] = ''
+. '<p><strong>1) Software behavior</strong><br>'
+. 'Perfex updates <code>lastcontact</code> when a contact date is saved on the lead (Last Contact field).</p>'
+. '<p><strong>2) Report rule</strong><br>'
+. 'Days = DATEDIFF(lastcontact, dateadded). Empty lastcontact = not contacted. Date filter on <code>dateadded</code>. Owner axis = <code>assigned</code>. A later contact moves lastcontact forward — not strictly “first” contact.</p>'
+. '<p><strong>3) Example</strong><br>'
+. 'Created Sat, contacted Wed → 3 days; contacted again Fri → distance to Friday is used.</p>';
 
 $lang['siba_leads_failed'] = 'Failed leads';
 $lang['siba_leads_failed_desc'] = 'Leads marked as failed (with reason). They no longer appear on the kanban.';

@@ -47,6 +47,11 @@ $reportDescription = _l($descKey);
 if ($reportDescription === $descKey) {
     $reportDescription = '';
 }
+$helpKey  = 'siba_leads_reports_help_' . $report;
+$helpHtml = _l($helpKey);
+if ($helpHtml === $helpKey || $helpHtml === '') {
+    $helpHtml = '<p>' . e(_l('siba_leads_reports_guide_body')) . '</p>';
+}
 $hideDateBucket = in_array($report, ['stage_time', 'pipeline', 'staff', 'aging'], true);
 
 $buildQuery = static function (array $override = []) use ($filters, $report) {
@@ -149,6 +154,9 @@ $axisUrl = static function ($axisKey) use ($buildQuery, $baseUrl, $report) {
                             </div>
 
                             <div class="siba-report-toolbar-actions siba-no-print">
+                                <button type="button" class="siba-tb-btn" data-toggle="modal" data-target="#siba-leads-report-help-modal">
+                                    <i class="fa fa-question-circle"></i> <?= e(_l('siba_leads_reports_guide')); ?>
+                                </button>
                                 <button type="button" class="siba-tb-btn" onclick="window.print();">
                                     <i class="fa fa-print"></i> <?= e(_l('siba_leads_reports_print')); ?>
                                 </button>
@@ -440,6 +448,29 @@ $axisUrl = static function ($axisKey) use ($buildQuery, $baseUrl, $report) {
         </div>
     </div>
 </div>
+
+<div class="modal fade siba-no-print" id="siba-leads-report-help-modal" tabindex="-1" role="dialog" aria-labelledby="siba-leads-report-help-title">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="<?= e(_l('siba_leads_reports_guide_close')); ?>">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="siba-leads-report-help-title">
+                    <?= e(_l('siba_leads_reports_guide_title')); ?>
+                    <small class="text-muted"> — <?= e($reportTitle); ?></small>
+                </h4>
+            </div>
+            <div class="modal-body siba-report-help-body">
+                <?= $helpHtml; ?>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal"><?= e(_l('siba_leads_reports_guide_close')); ?></button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <?php init_tail(); ?>
 <script src="https://code.highcharts.com/highcharts.js"></script>
 <script>
@@ -476,6 +507,19 @@ $(function () {
 </script>
 <style>
 .siba-report-legend-actions { margin-top: 10px; }
+.siba-report-help-body { line-height: 1.85; font-size: 14px; color: #334155; }
+.siba-report-help-body p { margin: 0 0 14px; }
+.siba-report-help-body strong { color: #0f172a; }
+.siba-report-help-body code {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 12px;
+    color: #0f766e;
+    direction: ltr;
+    display: inline-block;
+}
 @media print {
     .siba-no-print, .siba-report-idenav, .siba-report-filters-bar { display: none !important; }
 }
