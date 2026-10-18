@@ -2,7 +2,7 @@
     'use strict';
 
     window.sibaLeads = window.sibaLeads || {
-        version: '1.2.0',
+        version: '1.1.0',
         hideLeadFields: window.sibaLeadsHideLeadFields || {}
     };
 
@@ -555,73 +555,49 @@
         });
     };
 
+    var sibaBoardRequest = null;
+    window.siba_leads_init_loaded_board = function () {
+        siba_leads_init_status_sortable();
+        siba_leads_init_card_sortable();
+        if ($.fn.tooltip) $('#kan-ban [data-toggle="tooltip"]').tooltip({ container: 'body' });
+        if (typeof fix_kanban_height === 'function') fix_kanban_height(290, 360);
+        $('.kan-ban-col').each(function () { siba_leads_sync_column_empty_state($(this)); });
+    };
+
     window.siba_leads_kanban = function () {
-        if (!$('#kan-ban').length) {
-            return;
-        }
-
+        if (!$('#kan-ban').length) return;
         var parameters = siba_leads_build_kanban_params();
-        var shellUrl = typeof buildUrl === 'function'
-            ? buildUrl(admin_url + 'siba_leads/kanban', parameters)
-            : (admin_url + 'siba_leads/kanban?' + $.param(parameters));
-
-        var refreshBits = [];
+        var refresh = {};
         $('.kan-ban-col').each(function () {
-            var status = $(this).data('col-status-id');
+            var status = $(this).attr('data-col-status-id');
             var total = parseInt($(this).attr('data-total'), 10) || 0;
-            if (status && total > 0) {
-                refreshBits.push('refresh[' + status + ']=' + total);
-            }
+            if (status && total > 0) refresh[status] = total;
         });
-        if (refreshBits.length) {
-            shellUrl += (shellUrl.indexOf('?') === -1 ? '?' : '&') + refreshBits.join('&');
-        }
-
+        if (Object.keys(refresh).length) parameters.refresh = refresh;
         var token = ++sibaKanbanLoadToken;
-        $('body').append('<div class="dt-loader"></div>');
-
-        $('#kan-ban').load(shellUrl, function () {
-            $('body').find('.dt-loader').remove();
-            if (token !== sibaKanbanLoadToken) {
-                return;
-            }
-
-            if (typeof fix_kanban_height === 'function') {
-                fix_kanban_height(290, 360);
-            }
-            siba_leads_init_status_sortable();
-
-            var params = siba_leads_build_kanban_params();
-            var statusIds = [];
-            $('.kan-ban-col').each(function () {
-                var id = $(this).attr('data-col-status-id');
-                if (id) {
-                    statusIds.push(id);
-                }
-            });
-
-            if (!statusIds.length) {
-                return;
-            }
-
-            // Parallel column fetches — board paints shells first, cards stream in.
-            var jobs = statusIds.map(function (statusId) {
-                return siba_leads_fill_kanban_column(statusId, params, token);
-            });
-
-            $.when.apply($, jobs).always(function () {
-                if (token !== sibaKanbanLoadToken) {
+        if (sibaBoardRequest) sibaBoardRequest.abort();
+        $('#kan-ban').attr('aria-busy', 'true');
+        $('.siba-leads-workspace').addClass('is-loading');
+        sibaBoardRequest = $.getJSON(admin_url + 'siba_leads/kanban_board', parameters)
+            .done(function (response) {
+                if (token !== sibaKanbanLoadToken) return;
+                if (!response || !response.success || typeof response.html !== 'string') {
+                    if (typeof alert_float === 'function') alert_float('warning', window.sibaLeadsKanbanLoadFailed || 'بارگذاری برد انجام نشد؛ دوباره تلاش کنید.');
                     return;
                 }
-                siba_leads_init_card_sortable();
-                if (typeof fix_kanban_height === 'function') {
-                    fix_kanban_height(290, 360);
-                }
-                $('.kan-ban-col').each(function () {
-                    siba_leads_sync_column_empty_state($(this));
-                });
+                $('#kan-ban').html(response.html);
+                siba_leads_init_loaded_board();
+            })
+            .fail(function (xhr, status) {
+                if (token !== sibaKanbanLoadToken || status === 'abort') return;
+                if (typeof alert_float === 'function') alert_float('warning', window.sibaLeadsKanbanLoadFailed || 'بارگذاری برد انجام نشد؛ دوباره تلاش کنید.');
+            })
+            .always(function () {
+                if (token !== sibaKanbanLoadToken) return;
+                sibaBoardRequest = null;
+                $('#kan-ban').attr('aria-busy', 'false');
+                $('.siba-leads-workspace').removeClass('is-loading');
             });
-        });
     };
 
     function normalizeLabel(text) {

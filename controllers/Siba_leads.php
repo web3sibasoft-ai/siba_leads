@@ -47,7 +47,7 @@ class Siba_leads extends AdminController
         $data['statuses']      = function_exists('siba_leads_kanban_statuses')
             ? siba_leads_kanban_statuses()
             : $this->leads_model->get_status();
-        // Summary is loaded with the kanban AJAX shells — skip the heavy UNION on page paint.
+        // Summary and native cards are prepared together only for the kanban view.
         $data['base_currency'] = get_base_currency();
         $data['isKanBan']      = $isKanBan;
         $data['switch_kanban'] = $isKanBan ? 0 : 1;
@@ -73,6 +73,12 @@ class Siba_leads extends AdminController
             ? siba_leads_active_pipeline_map()
             : null;
         $data['active_pipeline_tag_id'] = (int) ($activePipeline['tag_id'] ?? 0);
+
+        // Paint the first board in this response; no second bootstrap or six column requests.
+        if ($isKanBan) {
+            $board = $this->kanban_board_data($data['statuses'], $data['base_currency']);
+            $data['initial_board_html'] = $board['html'];
+        }
 
         $this->load->view('siba_leads/manage', $data);
     }
@@ -546,23 +552,64 @@ class Siba_leads extends AdminController
     }
 
     /**
-     * First-page (or refresh) cards for one status column — loaded in parallel by the board.
+     * Legacy first-page (or refresh) response for one status column.
      */
     public function kanban_column()
     {
-        if (!$this->input->is_ajax_request()) {
-            show_404();
-        }
+        if (!$this->input->is_ajax_request()) show_404();
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($this->kanban_column_data(), JSON_UNESCAPED_UNICODE);
+    }
 
+    /** One read-only request for the same board, column pages and native card rendering. */
+    public function kanban_board()
+    {
+        if (!$this->input->is_ajax_request() || strtoupper($this->input->method()) !== 'GET') show_404();
+        $statuses = siba_leads_kanban_statuses();
+        $currency = get_base_currency();
+        // Resolve the pipeline/session defaults before releasing this read-only request's lock.
+        siba_leads_get_summary();
+        if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($this->kanban_board_data($statuses, $currency), JSON_UNESCAPED_UNICODE);
+    }
+
+    private function kanban_board_data(array $statuses, $currency): array
+    {
+        $summary = siba_leads_get_summary();
+        $totals = [];
+        foreach ($summary as $item) if (isset($item['id'])) $totals[(int) $item['id']] = (int) $item['total'];
+        $limit = max(1, (int) get_option('leads_kanban_limit'));
+        $saved = $_GET;
+        $refresh = isset($saved['refresh']) && is_array($saved['refresh']) ? $saved['refresh'] : [];
+        $columns = [];
+        try {
+            foreach ($statuses as $status) {
+                if (!empty($status['isdefault'])) continue;
+                $id = (int) $status['id'];
+                $_GET['status'] = $id;
+                $_GET['total_pages'] = (int) ceil(($totals[$id] ?? 0) / $limit);
+                if (isset($refresh[$id]) && is_scalar($refresh[$id])) $_GET['refresh'] = $refresh[$id];
+                else unset($_GET['refresh']);
+                $columns[$id] = $this->kanban_column_data();
+            }
+        } finally {
+            $_GET = $saved;
+        }
+        return ['success' => true, 'html' => $this->load->view('siba_leads/kan-ban', [
+            'statuses' => $statuses, 'base_currency' => $currency, 'summary' => $summary,
+            'initial_columns' => $columns,
+        ], true)];
+    }
+
+    private function kanban_column_data(): array
+    {
         $statusId = (int) $this->input->get('status');
         $this->db->where(db_prefix() . 'leads_status.id', $statusId);
         $status = $this->db->get(db_prefix() . 'leads_status')->row_array();
 
         if (!$status || !empty($status['isdefault'])) {
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['success' => false, 'html' => '', 'count' => 0, 'page' => 1, 'total_pages' => 0]);
-
-            return;
+            return ['success' => false, 'html' => '', 'count' => 0, 'page' => 1, 'total_pages' => 0];
         }
 
         $kanBan = siba_leads_kanban_for_status($status['id'])
@@ -613,8 +660,7 @@ class Siba_leads extends AdminController
             $page = max(1, (int) ceil($count / $limit));
         }
 
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
+        return [
             'success'     => true,
             'status'      => (int) $status['id'],
             'html'        => $html,
@@ -622,7 +668,7 @@ class Siba_leads extends AdminController
             'page'        => $page,
             'total_pages' => $total_pages,
             'has_more'    => $total_pages > $page,
-        ], JSON_UNESCAPED_UNICODE);
+        ];
     }
 
     public function kanban_load_more()

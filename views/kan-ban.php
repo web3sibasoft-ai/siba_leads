@@ -1,6 +1,6 @@
 <?php defined('BASEPATH') or exit('No direct script access allowed');
 /**
- * Lightweight column shells only — cards load in parallel via kanban_column.
+ * Native column markup, optionally populated by the initial or refreshed board response.
  */
 $is_admin   = is_admin();
 $can_create = function_exists('siba_leads_can_create')
@@ -26,16 +26,18 @@ foreach ($statuses as $status) {
         ? 'style="background:' . $status['color'] . ';border:1px solid ' . $status['color'] . '"'
         : '';
     $is_backlog = function_exists('siba_leads_is_backlog_status') && siba_leads_is_backlog_status($status['id']);
+    $initial = $initial_columns[(int) $status['id']] ?? null;
+    if ($initial !== null) $total_pages = (int) ($initial['total_pages'] ?? 0);
     $refreshTotal = null;
-    if ($this->input->get('refresh')) {
+    if (is_array($this->input->get('refresh'))) {
         $refreshTotal = $this->input->get('refresh')[$status['id']] ?? null;
     }
     ?>
 <ul class="kan-ban-col<?= $is_backlog ? ' siba-backlog-col' : ''; ?>"
     data-col-status-id="<?= e($status['id']); ?>"
     data-total-pages="<?= e($total_pages); ?>"
-    data-total="0"
-    data-siba-loaded="0"
+    data-total="<?= (int) ($initial['count'] ?? 0); ?>"
+    data-siba-loaded="<?= $initial !== null ? '1' : '0'; ?>"
     <?= $refreshTotal !== null && $refreshTotal !== '' ? 'data-siba-refresh="' . e($refreshTotal) . '"' : ''; ?>
     <?= $is_backlog ? 'data-siba-backlog="1"' : ''; ?>>
     <li class="kan-ban-col-wrapper">
@@ -88,21 +90,23 @@ foreach ($statuses as $status) {
                 <div class="kan-ban-content">
                     <ul class="status leads-status sortable"
                         data-lead-status-id="<?= e($status['id']); ?>">
+                        <?php if ($initial !== null) { echo $initial['html']; } else { ?>
                         <li class="text-center not-sortable siba-kanban-skeleton" aria-hidden="true">
                             <div class="siba-kanban-skeleton__card"></div>
                             <div class="siba-kanban-skeleton__card"></div>
                             <div class="siba-kanban-skeleton__card"></div>
                         </li>
-                        <li class="text-center not-sortable kanban-load-more hide"
+                        <?php } ?>
+                        <li class="text-center not-sortable kanban-load-more<?= empty($initial['has_more']) ? ' hide' : ''; ?>"
                             data-load-status="<?= e($status['id']); ?>">
                             <a href="#"
                                 class="btn btn-default btn-block<?= $total_pages <= 1 ? ' disabled' : ''; ?>"
-                                data-page="1"
+                                data-page="<?= (int) ($initial['page'] ?? 1); ?>"
                                 onclick="kanban_load_more(<?= e($status['id']); ?>, this, 'siba_leads/kanban_load_more', 315, 360); return false;">
                                 <?= _l('load_more'); ?>
                             </a>
                         </li>
-                        <li class="text-center not-sortable mtop30 kanban-empty hide">
+                        <li class="text-center not-sortable mtop30 kanban-empty<?= $initial === null || !empty($initial['count']) ? ' hide' : ''; ?>">
                             <h4>
                                 <i class="fa-solid fa-circle-notch" aria-hidden="true"></i><br /><br />
                                 <?= _l('no_leads_found'); ?>

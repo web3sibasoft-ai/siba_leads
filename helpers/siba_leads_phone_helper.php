@@ -418,6 +418,38 @@ function siba_leads_annotate_related_customers(array $leads): array
     return $leads;
 }
 
+/** Same digit-suffix predicate as LIKE '%suffix', grouped by length to avoid repeated LIKE scans. */
+function siba_leads_phone_suffix_where($db, string $column, array $suffixes): void
+{
+    $groups = [];
+    foreach ($suffixes as $suffix) {
+        $suffix = (string) $suffix;
+        // Preserve the legacy predicate for unexpected input outside normalized digit phones.
+        if (!preg_match('/^[0-9]+$/D', $suffix)) {
+            $db->or_like($column, $suffix, 'before');
+            continue;
+        }
+        $groups[strlen($suffix)][] = $db->escape($suffix);
+    }
+    foreach ($groups as $length => $values) {
+        $db->or_where('RIGHT(' . $db->escape_identifiers($column) . ',' . (int) $length . ') IN (' . implode(',', $values) . ')', null, false);
+    }
+}
+
+/** Preserve native string/numeric IN comparison while allowing homogeneous-list lookup. */
+function siba_leads_phone_variants_where($db, string $column, array $variants): void
+{
+    $strings = [];
+    $numbers = [];
+    foreach ($variants as $variant) {
+        if (is_int($variant) || is_float($variant)) $numbers[] = (string) $variant;
+        else $strings[] = (string) $variant;
+    }
+    if ($strings) $db->or_where_in($column, $strings);
+    // Comparing a VARCHAR phone to a native numeric literal uses floating point conversion.
+    if ($numbers) $db->or_where('(0e0 + ' . $db->escape_identifiers($column) . ') IN (' . implode(',', $numbers) . ')', null, false);
+}
+
 /**
  * Batch map normalized phones → lowest matching client userid.
  *
@@ -469,11 +501,9 @@ function siba_leads_batch_find_client_ids_by_phones(array $normalizedPhones): ar
     $CI->db->group_start();
     foreach ($clientPhoneCols as $col) {
         if ($variantList !== []) {
-            $CI->db->or_where_in($col, $variantList);
+            siba_leads_phone_variants_where($CI->db, $col, $variantList);
         }
-        foreach ($last10List as $last10) {
-            $CI->db->or_like($col, $last10, 'before');
-        }
+        siba_leads_phone_suffix_where($CI->db, $col, $last10List);
     }
     $CI->db->group_end();
     $CI->db->order_by('userid', 'ASC');
@@ -501,11 +531,9 @@ function siba_leads_batch_find_client_ids_by_phones(array $normalizedPhones): ar
         $CI->db->group_start();
         foreach ($contactPhoneCols as $col) {
             if ($variantList !== []) {
-                $CI->db->or_where_in($col, $variantList);
+                siba_leads_phone_variants_where($CI->db, $col, $variantList);
             }
-            foreach ($last10List as $last10) {
-                $CI->db->or_like($col, $last10, 'before');
-            }
+            siba_leads_phone_suffix_where($CI->db, $col, $last10List);
         }
         $CI->db->group_end();
         $CI->db->order_by('userid', 'ASC');

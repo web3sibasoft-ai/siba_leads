@@ -424,11 +424,13 @@ function siba_leads_get_summary(): array
     $sql    = substr(trim($sql), 0, -10);
     $result = $CI->db->query($sql)->result();
 
+    // Resolve pipeline lookups before staging this COUNT's Query Builder predicates.
+    $filter = $tagSql !== '' && function_exists('siba_leads_apply_tag_filter_where')
+        ? siba_leads_effective_tag_filter() : null;
     if (!$canViewAll) {
         $CI->db->where('assigned', $staffId);
     }
-    if ($tagSql !== '' && function_exists('siba_leads_apply_tag_filter_where')) {
-        $filter = siba_leads_effective_tag_filter();
+    if ($filter !== null) {
         siba_leads_apply_tag_filter_where($CI->db, $leadIdCol, $filter['tag_ids'], $filter['tag_none']);
     }
 

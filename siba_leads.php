@@ -5,12 +5,14 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Siba Leads
 Description: Lead extensions without changing Perfex core.
-Version: 1.0.0
+Version: 1.1.0
 Requires at least: 3.0.*
 Author: Siba
 */
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
+define('SIBA_LEADS_VERSION', '1.1.0');
+hooks()->add_action('admin_init', 'siba_leads_sync_release_version', 99);
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
 define('SIBA_LEADS_MAINTENANCE_MODE', false);
@@ -501,7 +503,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=20261015urgency') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.0-kanban') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -609,7 +611,7 @@ function siba_leads_load_admin_js()
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMoveFailed = ' . json_encode(_l('siba_leads_move_failed'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=20261015pipeline') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.0-kanban') . '"></script>';
 }
 
 function siba_leads_action_links($actions)
@@ -631,4 +633,14 @@ function siba_leads_not_importable_leads_fields($fields)
     $fields[] = 'converted_by_lead_manager';
 
     return array_values(array_unique($fields));
+}
+
+/** Release metadata only; schema remains the existing version2. */
+function siba_leads_sync_release_version(): void
+{
+    $CI = &get_instance();
+    $row = $CI->db->select('installed_version')->where('module_name', SIBA_LEADS_MODULE_NAME)->get(db_prefix() . 'modules')->row_array();
+    if ($row && version_compare((string) $row['installed_version'], SIBA_LEADS_VERSION, '<')) {
+        $CI->db->where('module_name', SIBA_LEADS_MODULE_NAME)->where('installed_version', $row['installed_version'])->update(db_prefix() . 'modules', ['installed_version' => SIBA_LEADS_VERSION]);
+    }
 }

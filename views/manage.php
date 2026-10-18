@@ -3,8 +3,11 @@
 <div id="wrapper">
     <div class="content">
         <div class="row">
-            <div class="col-md-12">
-                <div class="tw-mb-4">
+            <div class="col-md-12 siba-leads-workspace">
+                <section class="siba-leads-hero">
+                <div class="siba-leads-heading">
+                    <span class="siba-leads-heading__icon" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span>
+                    <div class="siba-leads-heading__text">
                     <h4 class="tw-my-0 tw-font-bold tw-text-xl">
                         <?= e($title); ?>
                     </h4>
@@ -16,7 +19,8 @@
                     </p>
                 </div>
 
-                <div class="_buttons tw-mb-3">
+                    </div>
+                <div class="_buttons siba-leads-toolbar">
                     <div class="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
                         <div class="tw-flex tw-items-center tw-gap-2">
                             <?php if (function_exists('siba_leads_can_create') ? siba_leads_can_create() : (is_admin() || staff_can('create', 'siba_leads'))) { ?>
@@ -52,7 +56,7 @@
                             <?php } ?>
                         </div>
                         <?php if ($isKanBan) { ?>
-                        <div class="leads-search" style="min-width: 240px;">
+                        <div class="leads-search siba-leads-search">
                             <div data-toggle="tooltip" data-placement="top"
                                 data-title="<?= _l('search_by_tags'); ?>">
                                 <?= render_input('search', '', '', 'search', [
@@ -66,9 +70,9 @@
                     </div>
                 </div>
 
-                <div class="panel_s tw-mb-3">
-                    <div class="panel-body !tw-py-3">
-                        <div class="row">
+                <div class="siba-leads-filters">
+                    <div class="siba-leads-filters__body">
+                        <div class="row siba-leads-filter-grid<?= !empty($pipelines) ? ' has-pipelines' : ''; ?>">
                             <?php
                             $pipelines = isset($pipelines) && is_array($pipelines) ? $pipelines : [];
                             $activePipelineId = isset($active_pipeline_id) ? (string) $active_pipeline_id : '';
@@ -129,7 +133,7 @@
                                 ?>
                             </div>
                             <div class="col-md-3">
-                                <div class="checkbox checkbox-primary tw-mt-8">
+                                <div class="checkbox checkbox-primary siba-leads-untagged">
                                     <input type="checkbox"
                                            id="siba_leads_tag_none"
                                            name="siba_leads_tag_none"
@@ -142,12 +146,14 @@
                     </div>
                 </div>
 
+                </section>
+
                 <?php if ($isKanBan) { ?>
                 <?= form_hidden('sort_type', $sort_by); ?>
                 <?= form_hidden('sort', $sort); ?>
 
                 <div class="active kan-ban-tab" id="kan-ban-tab" style="overflow:auto;">
-                    <div class="kanban-leads-sort tw-mb-3">
+                    <div class="kanban-leads-sort siba-leads-sort">
                         <span class="bold"><?= _l('leads_sort_by'); ?>:</span>
                         <a href="#" onclick="siba_leads_kanban_sort('dateadded'); return false;" class="dateadded">
                             <?php if ($sort_by === 'dateadded') { ?>
@@ -155,14 +161,12 @@
                             <?php } ?>
                             <?= _l('leads_sort_by_datecreated'); ?>
                         </a>
-                        |
                         <a href="#" onclick="siba_leads_kanban_sort('leadorder'); return false;" class="leadorder">
                             <?php if ($sort_by === 'leadorder') { ?>
                             <i class="kanban-sort-icon fa fa-sort-amount-<?= strtolower($sort); ?>"></i>
                             <?php } ?>
                             <?= _l('leads_sort_by_kanban_order'); ?>
                         </a>
-                        |
                         <a href="#" onclick="siba_leads_kanban_sort('lastcontact'); return false;" class="lastcontact">
                             <?php if ($sort_by === 'lastcontact') { ?>
                             <i class="kanban-sort-icon fa fa-sort-amount-<?= strtolower($sort); ?>"></i>
@@ -174,7 +178,7 @@
                     <div class="row">
                         <div class="container-fluid leads-kan-ban siba-leads-kan-ban">
                             <div class="kan-ban-top"></div>
-                            <div id="kan-ban"></div>
+                            <div id="kan-ban"><?= $initial_board_html ?? ''; ?></div>
                         </div>
                     </div>
                 </div>
@@ -246,7 +250,7 @@
 <script>
 $(function () {
 <?php if ($isKanBan) { ?>
-    siba_leads_kanban();
+    siba_leads_init_loaded_board();
 <?php } else { ?>
     var SibaLeadsServerParams = {};
     SibaLeadsServerParams['siba_leads_tags'] = '[name="siba_leads_tags[]"]';
