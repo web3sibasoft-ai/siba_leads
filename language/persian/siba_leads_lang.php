@@ -149,6 +149,14 @@ $lang['siba_leads_tag_must_exist'] = 'فقط برچسب‌های از پیش ت�
 $lang['siba_leads_filter_tags'] = 'فیلتر بر اساس برچسب';
 $lang['siba_leads_filter_all_tags'] = 'همه برچسب‌ها';
 $lang['siba_leads_filter_untagged'] = 'فقط بدون برچسب';
+$lang['siba_leads_filter_urgency'] = 'فیلتر سررسید';
+$lang['siba_leads_filter_urgency_all'] = 'همه';
+$lang['siba_leads_filter_urgency_due'] = 'سررسید امروز / گذشته';
+$lang['siba_leads_filter_urgency_task_due'] = 'وظیفه سررسیددار';
+$lang['siba_leads_filter_urgency_reminder_due'] = 'یادآور سررسیددار';
+$lang['siba_leads_filter_urgency_overdue'] = 'فقط عقب‌افتاده';
+$lang['siba_leads_filter_urgency_today'] = 'سررسید امروز';
+$lang['siba_leads_filter_urgency_my_tasks'] = 'وظایف فعال من';
 
 $lang['siba_leads_reports'] = 'گزارش‌های لید';
 $lang['siba_leads_reports_desc'] = 'تحلیل معاملات: ورودی، مراحل کاریز، نرخ و سرعت تبدیل، شیوه آشنایی، دلایل شکست و ارزش فروش.';

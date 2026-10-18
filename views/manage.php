@@ -143,6 +143,64 @@
                                 </div>
                             </div>
                         </div>
+                        <?php if ($isKanBan) { ?>
+                        <div class="siba-leads-urgency" role="group" aria-label="<?= e(_l('siba_leads_filter_urgency')); ?>">
+                            <span class="siba-leads-urgency__label"><?= _l('siba_leads_filter_urgency'); ?></span>
+                            <div class="siba-leads-urgency__chips">
+                                <button type="button"
+                                        class="siba-leads-urgency__chip is-active"
+                                        data-urgency=""
+                                        onclick="siba_leads_urgency_filter(''); return false;">
+                                    <?= _l('siba_leads_filter_urgency_all'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--due"
+                                        data-urgency="due"
+                                        onclick="siba_leads_urgency_filter('due'); return false;">
+                                    <i class="fa-solid fa-bell" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_due'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--task"
+                                        data-urgency="task_due"
+                                        onclick="siba_leads_urgency_filter('task_due'); return false;">
+                                    <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_task_due'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--reminder"
+                                        data-urgency="reminder_due"
+                                        onclick="siba_leads_urgency_filter('reminder_due'); return false;">
+                                    <i class="fa-regular fa-clock" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_reminder_due'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--overdue"
+                                        data-urgency="overdue"
+                                        onclick="siba_leads_urgency_filter('overdue'); return false;">
+                                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_overdue'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--today"
+                                        data-urgency="today"
+                                        onclick="siba_leads_urgency_filter('today'); return false;">
+                                    <i class="fa-solid fa-sun" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_today'); ?>
+                                </button>
+                                <button type="button"
+                                        class="siba-leads-urgency__chip siba-leads-urgency__chip--mine"
+                                        data-urgency="my_tasks"
+                                        onclick="siba_leads_urgency_filter('my_tasks'); return false;">
+                                    <i class="fa-solid fa-user-check" aria-hidden="true"></i>
+                                    <?= _l('siba_leads_filter_urgency_my_tasks'); ?>
+                                </button>
+                            </div>
+                            <div id="kanban-params" class="hide">
+                                <input type="hidden" name="urgency" id="siba_leads_urgency" value="">
+                            </div>
+                        </div>
+                        <?php } ?>
                     </div>
                 </div>
 

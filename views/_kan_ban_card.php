@@ -43,8 +43,15 @@ if ($cardUrgency === 'overdue') {
 } elseif ($cardUrgency === 'today') {
     $urgencyCardClass = ' has-today-reminder';
 }
+$taskDueAttr     = $hasDueTask ? e($taskDueStatus) : '';
+$reminderDueAttr = $hasDueReminder ? e($reminderDueStatus) : '';
 ?>
-<li data-lead-id="<?= e($lead['id']); ?>" <?= $lead_already_client_tooltip; ?>
+<li data-lead-id="<?= e($lead['id']); ?>"
+    data-urgency="<?= e($cardUrgency); ?>"
+    data-task-due="<?= $taskDueAttr; ?>"
+    data-reminder-due="<?= $reminderDueAttr; ?>"
+    data-my-tasks="<?= $hasMyActiveTask ? '1' : '0'; ?>"
+    <?= $lead_already_client_tooltip; ?>
     class="lead-kan-ban siba-lead-card<?= $mine_class . $locked_class; ?><?= $hasMyActiveTask ? ' has-my-active-task' : ''; ?><?= $urgencyCardClass; ?>">
     <div class="panel-body lead-body siba-lead-card__body">
         <div class="siba-lead-card__header">

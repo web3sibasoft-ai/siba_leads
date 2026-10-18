@@ -621,6 +621,9 @@ class Siba_leads extends AdminController
         if (function_exists('siba_leads_kanban_apply_tag_filter')) {
             $kanBan = siba_leads_kanban_apply_tag_filter($kanBan);
         }
+        if (function_exists('siba_leads_kanban_apply_urgency_filter')) {
+            $kanBan = siba_leads_kanban_apply_urgency_filter($kanBan);
+        }
 
         $refresh = $this->input->get('refresh');
         if ($refresh !== null && $refresh !== '') {
@@ -644,11 +647,14 @@ class Siba_leads extends AdminController
             ? siba_leads_request_tag_filter()
             : ['tag_ids' => [], 'tag_none' => false];
         $hasTagFilter = !empty($tagFilter['tag_none']) || !empty($tagFilter['tag_ids']);
+        $urgencyFilter = function_exists('siba_leads_request_urgency_filter')
+            ? siba_leads_request_urgency_filter()
+            : '';
         $limit       = max(1, (int) $kanBan->limit());
         $count       = count($leads);
         $total_pages = (int) $this->input->get('total_pages');
-        // Search/tag filter needs a real count; otherwise trust shell total_pages from the summary.
-        if (($searchQ !== null && $searchQ !== '') || $hasTagFilter) {
+        // Search/tag/urgency filter needs a real count; otherwise trust shell total_pages from the summary.
+        if (($searchQ !== null && $searchQ !== '') || $hasTagFilter || $urgencyFilter !== '') {
             $total_pages = (int) $kanBan->totalPages();
         } elseif ($total_pages < 0) {
             $total_pages = 0;
@@ -696,6 +702,9 @@ class Siba_leads extends AdminController
             ->page($page);
         if (function_exists('siba_leads_kanban_apply_tag_filter')) {
             $kanBan = siba_leads_kanban_apply_tag_filter($kanBan);
+        }
+        if (function_exists('siba_leads_kanban_apply_urgency_filter')) {
+            $kanBan = siba_leads_kanban_apply_urgency_filter($kanBan);
         }
         $leads = $kanBan->get();
 

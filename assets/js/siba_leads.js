@@ -41,6 +41,23 @@
         }
     };
 
+    window.siba_leads_urgency_filter = function (urgency) {
+        urgency = String(urgency || '');
+        var $input = $('#siba_leads_urgency');
+        if ($input.length) {
+            $input.val(urgency);
+        }
+        $('.siba-leads-urgency__chip').removeClass('is-active');
+        var $chip = $('.siba-leads-urgency__chip[data-urgency="' + urgency + '"]');
+        if (!$chip.length) {
+            $chip = $('.siba-leads-urgency__chip[data-urgency=""]');
+        }
+        $chip.addClass('is-active');
+        if (typeof siba_leads_kanban === 'function') {
+            siba_leads_kanban();
+        }
+    };
+
     window.siba_leads_list_filter_changed = function () {
         var $none = $('#siba_leads_tag_none');
         var $tags = $('select[name="siba_leads_tags[]"]');
@@ -414,6 +431,11 @@
             if (tagVals && tagVals.length) {
                 parameters.tags = $.isArray(tagVals) ? tagVals.join(',') : String(tagVals);
             }
+        }
+
+        var urgency = $('#siba_leads_urgency').val();
+        if (typeof urgency !== 'undefined' && urgency !== '') {
+            parameters.urgency = urgency;
         }
 
         var sort_type = $('input[name="sort_type"]');

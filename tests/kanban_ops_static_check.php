@@ -47,6 +47,9 @@ check('Core leads list toolbar button removed', !file_has($manage, "admin_url('l
 check('List DataTable endpoint', file_has($manage, "admin_url + 'siba_leads/table'"));
 check('Teams link (admin)', file_has($manage, "admin_url('siba_leads/teams')"));
 check('Search input refreshes board', file_has($manage, 'siba_leads_kanban_search();') || file_has($manage, 'siba_leads_kanban();'));
+check('Urgency filter chips in hero', file_has($manage, 'siba-leads-urgency') && file_has($manage, 'siba_leads_urgency_filter('));
+check('Urgency filter JS helper', file_has($js, 'siba_leads_urgency_filter'));
+check('Urgency filter passed to board', file_has($js, 'parameters.urgency'));
 check('Controller switch_kanban()', file_has($ctrl, 'function switch_kanban'));
 check('Controller table()', file_has($ctrl, 'function table()'));
 check('Parallel column endpoint', file_has($ctrl, 'function kanban_column') && file_has($js, 'kanban_column'));

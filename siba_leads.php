@@ -503,7 +503,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.0-kanban') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.1-urgency') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -611,7 +611,7 @@ function siba_leads_load_admin_js()
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMoveFailed = ' . json_encode(_l('siba_leads_move_failed'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.0-kanban') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.1-urgency') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

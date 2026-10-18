@@ -149,6 +149,14 @@ $lang['siba_leads_tag_must_exist'] = 'Only existing tags can be used. Create new
 $lang['siba_leads_filter_tags'] = 'Filter by tags';
 $lang['siba_leads_filter_all_tags'] = 'All tags';
 $lang['siba_leads_filter_untagged'] = 'Untagged only';
+$lang['siba_leads_filter_urgency'] = 'Due filters';
+$lang['siba_leads_filter_urgency_all'] = 'All';
+$lang['siba_leads_filter_urgency_due'] = 'Due today / overdue';
+$lang['siba_leads_filter_urgency_task_due'] = 'Task due';
+$lang['siba_leads_filter_urgency_reminder_due'] = 'Reminder due';
+$lang['siba_leads_filter_urgency_overdue'] = 'Overdue only';
+$lang['siba_leads_filter_urgency_today'] = 'Due today';
+$lang['siba_leads_filter_urgency_my_tasks'] = 'My active tasks';
 
 $lang['siba_leads_reports'] = 'Lead reports';
 $lang['siba_leads_reports_desc'] = 'Deal analytics: incoming volume, pipeline stages, conversion, speed, sources, failures, and sales value.';

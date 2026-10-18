@@ -392,6 +392,9 @@ function siba_leads_get_summary(): array
     $tagSql     = function_exists('siba_leads_tag_filter_sql')
         ? siba_leads_tag_filter_sql($leadIdCol)
         : '';
+    $urgencySql = function_exists('siba_leads_urgency_filter_sql')
+        ? siba_leads_urgency_filter_sql($leadIdCol)
+        : '';
     $sql        = '';
 
     $statuses[] = [
@@ -413,6 +416,7 @@ function siba_leads_get_summary(): array
         }
 
         $sql .= $tagSql;
+        $sql .= $urgencySql;
 
         if (!$canViewAll) {
             $sql .= ' AND assigned=' . $staffId;
@@ -427,11 +431,17 @@ function siba_leads_get_summary(): array
     // Resolve pipeline lookups before staging this COUNT's Query Builder predicates.
     $filter = $tagSql !== '' && function_exists('siba_leads_apply_tag_filter_where')
         ? siba_leads_effective_tag_filter() : null;
+    $urgency = function_exists('siba_leads_request_urgency_filter')
+        ? siba_leads_request_urgency_filter()
+        : '';
     if (!$canViewAll) {
         $CI->db->where('assigned', $staffId);
     }
     if ($filter !== null) {
         siba_leads_apply_tag_filter_where($CI->db, $leadIdCol, $filter['tag_ids'], $filter['tag_none']);
+    }
+    if ($urgency !== '' && function_exists('siba_leads_apply_urgency_filter_where')) {
+        siba_leads_apply_urgency_filter_where($CI->db, $leadIdCol, $urgency);
     }
 
     $total_leads = $CI->db->count_all_results(db_prefix() . 'leads');
@@ -2647,6 +2657,229 @@ function siba_leads_kanban_apply_tag_filter($kanBan)
 
     return $kanBan->tapQuery(static function ($status, $ci) use ($leadCol, $tagIds, $tagNone) {
         siba_leads_apply_tag_filter_where($ci->db, $leadCol, $tagIds, $tagNone);
+    });
+}
+
+/**
+ * Allowed quick urgency filters for the kanban hero chips.
+ *
+ * @return string[]
+ */
+function siba_leads_urgency_filter_keys(): array
+{
+    return ['due', 'task_due', 'reminder_due', 'overdue', 'today', 'my_tasks'];
+}
+
+/**
+ * Read urgency quick-filter from the current request.
+ */
+function siba_leads_request_urgency_filter(): string
+{
+    $CI  = &get_instance();
+    $raw = strtolower(trim((string) $CI->input->get_post('urgency')));
+    if ($raw === '' || $raw === 'all') {
+        return '';
+    }
+
+    return in_array($raw, siba_leads_urgency_filter_keys(), true) ? $raw : '';
+}
+
+/**
+ * SQL fragment matching incomplete lead tasks due today or earlier.
+ */
+function siba_leads_urgency_task_due_sql(string $leadIdColumn, string $mode = 'due'): string
+{
+    $prefix = db_prefix();
+    $tasks  = $prefix . 'tasks';
+    $base   = $leadIdColumn . ' IN (SELECT rel_id FROM ' . $tasks
+        . ' WHERE rel_type = "lead" AND status != 5'
+        . ' AND duedate IS NOT NULL AND duedate != "0000-00-00" AND duedate != "0000-00-00 00:00:00"';
+
+    if ($mode === 'overdue') {
+        return $base . ' AND DATE(duedate) < CURDATE())';
+    }
+    if ($mode === 'today') {
+        return $base . ' AND DATE(duedate) = CURDATE())';
+    }
+
+    return $base . ' AND duedate < DATE_ADD(CURDATE(), INTERVAL 1 DAY))';
+}
+
+/**
+ * SQL fragment matching open reminders (on lead or lead tasks) due today or earlier.
+ */
+function siba_leads_urgency_reminder_due_sql(string $leadIdColumn, string $mode = 'due'): string
+{
+    $prefix    = db_prefix();
+    $reminders = $prefix . 'reminders';
+    $tasks     = $prefix . 'tasks';
+
+    if ($mode === 'overdue') {
+        $datePredLead = ' AND DATE(date) < CURDATE()';
+        $datePredTask = ' AND DATE(r.date) < CURDATE()';
+    } elseif ($mode === 'today') {
+        $datePredLead = ' AND DATE(date) = CURDATE()';
+        $datePredTask = ' AND DATE(r.date) = CURDATE()';
+    } else {
+        $datePredLead = ' AND date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)';
+        $datePredTask = ' AND r.date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)';
+    }
+
+    $onLead = $leadIdColumn . ' IN (SELECT rel_id FROM ' . $reminders
+        . ' WHERE rel_type = "lead" AND isnotified = 0' . $datePredLead . ')';
+    $onTask = $leadIdColumn . ' IN (SELECT t.rel_id FROM ' . $reminders . ' r'
+        . ' INNER JOIN ' . $tasks . ' t ON t.id = r.rel_id AND t.rel_type = "lead"'
+        . ' WHERE r.rel_type = "task" AND r.isnotified = 0' . $datePredTask . ')';
+
+    return '((' . $onLead . ') OR (' . $onTask . '))';
+}
+
+/**
+ * Apply urgency quick-filter to the active Query Builder.
+ *
+ * @param object $db CI_DB_query_builder
+ */
+function siba_leads_apply_urgency_filter_where($db, string $leadIdColumn, string $urgency): void
+{
+    $urgency = strtolower(trim($urgency));
+    if ($urgency === '' || $urgency === 'all') {
+        return;
+    }
+
+    $prefix = db_prefix();
+
+    if ($urgency === 'my_tasks') {
+        $staffId = (int) get_staff_user_id();
+        if ($staffId < 1) {
+            $db->where('1 = 0', null, false);
+
+            return;
+        }
+        $db->where(
+            $leadIdColumn . ' IN (SELECT t.rel_id FROM ' . $prefix . 'tasks t'
+            . ' INNER JOIN ' . $prefix . 'task_assigned ta ON ta.taskid = t.id'
+            . ' WHERE t.rel_type = "lead" AND t.status != 5 AND ta.staffid = ' . $staffId . ')',
+            null,
+            false
+        );
+
+        return;
+    }
+
+    if ($urgency === 'task_due') {
+        $db->where(siba_leads_urgency_task_due_sql($leadIdColumn, 'due'), null, false);
+
+        return;
+    }
+
+    if ($urgency === 'reminder_due') {
+        $db->where(siba_leads_urgency_reminder_due_sql($leadIdColumn, 'due'), null, false);
+
+        return;
+    }
+
+    if ($urgency === 'overdue') {
+        $db->where(
+            '((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'overdue') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'overdue') . ')',
+            null,
+            false
+        );
+
+        return;
+    }
+
+    if ($urgency === 'today') {
+        $db->where(
+            '((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'today') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'today') . ')',
+            null,
+            false
+        );
+
+        return;
+    }
+
+    if ($urgency === 'due') {
+        $db->where(
+            '((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'due') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'due') . ')',
+            null,
+            false
+        );
+    }
+}
+
+/**
+ * Raw SQL AND-fragment for the urgency quick-filter (UNION summaries).
+ */
+function siba_leads_urgency_filter_sql(string $leadIdColumn = ''): string
+{
+    $urgency = siba_leads_request_urgency_filter();
+    if ($urgency === '') {
+        return '';
+    }
+
+    if ($leadIdColumn === '') {
+        $leadIdColumn = db_prefix() . 'leads.id';
+    }
+
+    $prefix = db_prefix();
+
+    if ($urgency === 'my_tasks') {
+        $staffId = (int) get_staff_user_id();
+        if ($staffId < 1) {
+            return ' AND 1 = 0';
+        }
+
+        return ' AND ' . $leadIdColumn . ' IN (SELECT t.rel_id FROM ' . $prefix . 'tasks t'
+            . ' INNER JOIN ' . $prefix . 'task_assigned ta ON ta.taskid = t.id'
+            . ' WHERE t.rel_type = "lead" AND t.status != 5 AND ta.staffid = ' . $staffId . ')';
+    }
+
+    if ($urgency === 'task_due') {
+        return ' AND ' . siba_leads_urgency_task_due_sql($leadIdColumn, 'due');
+    }
+
+    if ($urgency === 'reminder_due') {
+        return ' AND ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'due');
+    }
+
+    if ($urgency === 'overdue') {
+        return ' AND ((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'overdue') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'overdue') . ')';
+    }
+
+    if ($urgency === 'today') {
+        return ' AND ((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'today') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'today') . ')';
+    }
+
+    if ($urgency === 'due') {
+        return ' AND ((' . siba_leads_urgency_task_due_sql($leadIdColumn, 'due') . ')'
+            . ' OR ' . siba_leads_urgency_reminder_due_sql($leadIdColumn, 'due') . ')';
+    }
+
+    return '';
+}
+
+/**
+ * Attach urgency quick-filter to a Siba kanban instance via tapQuery.
+ *
+ * @param \modules\siba_leads\services\SibaLeadsKanban $kanBan
+ * @return \modules\siba_leads\services\SibaLeadsKanban
+ */
+function siba_leads_kanban_apply_urgency_filter($kanBan)
+{
+    $urgency = siba_leads_request_urgency_filter();
+    if ($urgency === '') {
+        return $kanBan;
+    }
+
+    $leadCol = db_prefix() . 'leads.id';
+
+    return $kanBan->tapQuery(static function ($status, $ci) use ($leadCol, $urgency) {
+        siba_leads_apply_urgency_filter_where($ci->db, $leadCol, $urgency);
     });
 }
 
