@@ -73,6 +73,20 @@ class Siba_leads extends AdminController
             ? siba_leads_active_pipeline_map()
             : null;
         $data['active_pipeline_tag_id'] = (int) ($activePipeline['tag_id'] ?? 0);
+        $data['staff'] = [];
+        if (!empty($data['can_view_all'])) {
+            $this->load->model('staff_model');
+            $staffRows = $this->staff_model->get('', ['active' => 1, 'is_not_staff' => 0]);
+            if (!is_array($staffRows)) {
+                $staffRows = [];
+            }
+            array_unshift($staffRows, [
+                'staffid'   => '0',
+                'firstname' => _l('siba_leads_unassigned'),
+                'lastname'  => '',
+            ]);
+            $data['staff'] = $staffRows;
+        }
 
         // Paint the first board in this response; no second bootstrap or six column requests.
         if ($isKanBan) {
@@ -162,6 +176,11 @@ class Siba_leads extends AdminController
         ];
         if (!siba_leads_can_view_all()) {
             $where[] = 'AND ' . $prefix . 'leads.assigned = ' . (int) get_staff_user_id();
+        } elseif (function_exists('siba_leads_request_assigned_filter')) {
+            $assignedFilter = siba_leads_request_assigned_filter();
+            if ($assignedFilter !== null) {
+                $where[] = 'AND ' . $prefix . 'leads.assigned = ' . (int) $assignedFilter;
+            }
         }
 
         // Same scope as kanban: request tags, or active pipeline tag when none set.
@@ -473,6 +492,155 @@ class Siba_leads extends AdminController
     }
 
     /**
+     * Archive of successful / converted leads (after financial approval creates the client).
+     */
+    public function successful()
+    {
+        close_setup_menu();
+
+        if (function_exists('siba_leads_ensure_lead_columns')) {
+            siba_leads_ensure_lead_columns();
+        }
+
+        $this->load->model('staff_model');
+        if (!function_exists('siba_leads_reports_is_sale_sql')) {
+            $this->load->helper('siba_leads/siba_leads_reports');
+        }
+
+        $filters = [
+            'outcome_by'  => (int) $this->input->get('outcome_by'),
+            'assigned'    => (int) $this->input->get('assigned'),
+            'outcome_how' => trim((string) $this->input->get('outcome_how')),
+            'date_from'   => trim((string) $this->input->get('date_from')),
+            'date_to'     => trim((string) $this->input->get('date_to')),
+            'q'           => trim((string) $this->input->get('q')),
+        ];
+
+        $prefix   = db_prefix();
+        $leadsT   = $prefix . 'leads';
+        $clientsT = $prefix . 'clients';
+        $saleDate = function_exists('siba_leads_reports_sale_date_sql')
+            ? siba_leads_reports_sale_date_sql($leadsT)
+            : 'COALESCE(' . $leadsT . '.siba_outcome_at, ' . $leadsT . '.date_converted)';
+        $saleWhere = function_exists('siba_leads_reports_is_sale_sql')
+            ? siba_leads_reports_is_sale_sql($leadsT)
+            : '(' . $leadsT . ".siba_outcome = 'success' OR (" . $leadsT . '.date_converted IS NOT NULL AND '
+                . $leadsT . ".date_converted > '1971-01-01 00:00:00'))";
+
+        $select = $leadsT . '.*, c.userid as client_userid, c.company as client_company, '
+            . $saleDate . ' as success_at';
+        $ordersT = $prefix . 'siba_orders';
+        if ($this->db->table_exists($ordersT)) {
+            $select .= ', ('
+                . 'SELECT o.order_id FROM `' . $ordersT . '` o'
+                . ' WHERE o.order_lead_id = ' . $leadsT . '.id'
+                . ' AND o.order_financial_approval = 1'
+                . ' ORDER BY o.order_id DESC LIMIT 1'
+                . ') as approved_order_id';
+        }
+
+        $this->db->select($select, false);
+        $this->db->from($leadsT);
+        $this->db->join($clientsT . ' c', 'c.leadid = ' . $leadsT . '.id', 'left');
+        $this->db->where($saleWhere, null, false);
+
+        if (!siba_leads_can_view_all()) {
+            $this->db->where($leadsT . '.assigned', (int) get_staff_user_id());
+        }
+
+        if ($filters['outcome_by'] > 0) {
+            $this->db->where($leadsT . '.siba_outcome_by', $filters['outcome_by']);
+        }
+        if ($filters['assigned'] > 0) {
+            $this->db->where($leadsT . '.assigned', $filters['assigned']);
+        }
+        if ($filters['outcome_how'] !== '') {
+            $this->db->where($leadsT . '.siba_outcome_how', $filters['outcome_how']);
+        }
+        if ($filters['date_from'] !== '') {
+            if (!function_exists('to_sql_date_custom')) {
+                $this->load->helper('siba_license/siba_license');
+            }
+            $fromRaw = function_exists('siba_license_to_latin_digits')
+                ? siba_license_to_latin_digits($filters['date_from'])
+                : $filters['date_from'];
+            $from = function_exists('to_sql_date_custom')
+                ? to_sql_date_custom($fromRaw)
+                : to_sql_date($fromRaw);
+            if (is_string($from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+                $this->db->where($saleDate . ' >= ' . $this->db->escape($from . ' 00:00:00'), null, false);
+                if (function_exists('to_view_date_custom')) {
+                    $viewFrom = to_view_date_custom($from);
+                    if ($viewFrom) {
+                        $filters['date_from'] = $viewFrom;
+                    }
+                }
+            } else {
+                $filters['date_from'] = '';
+            }
+        }
+        if ($filters['date_to'] !== '') {
+            if (!function_exists('to_sql_date_custom')) {
+                $this->load->helper('siba_license/siba_license');
+            }
+            $toRaw = function_exists('siba_license_to_latin_digits')
+                ? siba_license_to_latin_digits($filters['date_to'])
+                : $filters['date_to'];
+            $to = function_exists('to_sql_date_custom')
+                ? to_sql_date_custom($toRaw)
+                : to_sql_date($toRaw);
+            if (is_string($to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+                $this->db->where($saleDate . ' <= ' . $this->db->escape($to . ' 23:59:59'), null, false);
+                if (function_exists('to_view_date_custom')) {
+                    $viewTo = to_view_date_custom($to);
+                    if ($viewTo) {
+                        $filters['date_to'] = $viewTo;
+                    }
+                }
+            } else {
+                $filters['date_to'] = '';
+            }
+        }
+        if ($filters['q'] !== '') {
+            $q = $this->db->escape_like_str($filters['q']);
+            $this->db->group_start();
+            $this->db->like($leadsT . '.name', $q);
+            $this->db->or_like($leadsT . '.phonenumber', $q);
+            $this->db->or_like($leadsT . '.email', $q);
+            $this->db->or_like($leadsT . '.company', $q);
+            $this->db->or_like('c.company', $q);
+            $this->db->group_end();
+        }
+
+        $this->db->order_by($saleDate, 'DESC', false);
+        $this->db->order_by($leadsT . '.id', 'DESC');
+        $leads = $this->db->get()->result_array();
+
+        $howOptions = [];
+        if (function_exists('siba_leads_outcome_how_labels')) {
+            foreach (siba_leads_outcome_how_labels() as $key => $label) {
+                if (strpos((string) $key, 'success') !== false || $key === 'financial_approval' || $key === 'manual_success') {
+                    $howOptions[] = ['id' => $key, 'name' => $label];
+                }
+            }
+        }
+        if ($howOptions === []) {
+            $howOptions = [
+                ['id' => 'financial_approval', 'name' => _l('siba_leads_outcome_how_financial_approval')],
+                ['id' => 'manual_success', 'name' => _l('siba_leads_outcome_how_manual_success')],
+            ];
+        }
+
+        $data['title']      = _l('siba_leads_successful');
+        $data['leads']      = $leads;
+        $data['filters']    = $filters;
+        $data['staff']      = $this->staff_model->get('', ['active' => 1, 'is_not_staff' => 0]);
+        $data['howOptions'] = $howOptions;
+
+        $this->load->view('siba_leads/successful/manage', $data);
+    }
+
+    /**
      * Aggregated lead reports (analysis / incoming / pipeline / conversion / speed / sources / failures / sales).
      */
     public function reports()
@@ -624,6 +792,9 @@ class Siba_leads extends AdminController
         if (function_exists('siba_leads_kanban_apply_urgency_filter')) {
             $kanBan = siba_leads_kanban_apply_urgency_filter($kanBan);
         }
+        if (function_exists('siba_leads_kanban_apply_assigned_filter')) {
+            $kanBan = siba_leads_kanban_apply_assigned_filter($kanBan);
+        }
 
         $refresh = $this->input->get('refresh');
         if ($refresh !== null && $refresh !== '') {
@@ -650,11 +821,14 @@ class Siba_leads extends AdminController
         $urgencyFilter = function_exists('siba_leads_request_urgency_filter')
             ? siba_leads_request_urgency_filter()
             : '';
+        $assignedFilter = function_exists('siba_leads_request_assigned_filter')
+            ? siba_leads_request_assigned_filter()
+            : null;
         $limit       = max(1, (int) $kanBan->limit());
         $count       = count($leads);
         $total_pages = (int) $this->input->get('total_pages');
-        // Search/tag/urgency filter needs a real count; otherwise trust shell total_pages from the summary.
-        if (($searchQ !== null && $searchQ !== '') || $hasTagFilter || $urgencyFilter !== '') {
+        // Search/tag/urgency/assignee filter needs a real count; otherwise trust shell total_pages from the summary.
+        if (($searchQ !== null && $searchQ !== '') || $hasTagFilter || $urgencyFilter !== '' || $assignedFilter !== null) {
             $total_pages = (int) $kanBan->totalPages();
         } elseif ($total_pages < 0) {
             $total_pages = 0;
@@ -706,6 +880,9 @@ class Siba_leads extends AdminController
         if (function_exists('siba_leads_kanban_apply_urgency_filter')) {
             $kanBan = siba_leads_kanban_apply_urgency_filter($kanBan);
         }
+        if (function_exists('siba_leads_kanban_apply_assigned_filter')) {
+            $kanBan = siba_leads_kanban_apply_assigned_filter($kanBan);
+        }
         $leads = $kanBan->get();
 
         foreach ($leads as $lead) {
@@ -747,6 +924,42 @@ class Siba_leads extends AdminController
         echo $this->load->view('siba_leads/_kan_ban_card_details', [
             'lead' => $leadArr,
         ], true);
+    }
+
+    /**
+     * JSON urgency payload for live kanban card updates (e.g. after task due date change).
+     *
+     * @param int $id Lead id
+     */
+    public function kanban_card_urgency($id = 0)
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
+            ajax_access_denied();
+        }
+
+        $id = (int) $id;
+        if ($id < 1 || !siba_leads_can_manage_lead($id)) {
+            ajax_access_denied();
+        }
+
+        $payload = function_exists('siba_leads_lead_card_urgency')
+            ? siba_leads_lead_card_urgency($id)
+            : null;
+
+        if (!$payload) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false]);
+
+            return;
+        }
+
+        $payload['success'] = true;
+        header('Content-Type: application/json');
+        echo json_encode($payload);
     }
 
     public function update_lead_status()

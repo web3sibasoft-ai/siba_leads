@@ -179,10 +179,11 @@ $reminderDueAttr = $hasDueReminder ? e($reminderDueStatus) : '';
             }
         ?>
             <span class="siba-lead-card__badge w-100 <?= e($taskBadgeClass); ?>"
+                data-siba-urgency-badge="task"
                 data-toggle="tooltip"
                 title="<?= e($taskTooltip); ?>">
                 <i class="fa-regular fa-calendar-check"></i>
-                <?= e($taskBadgeText); ?>
+                <span class="siba-lead-card__badge-text"><?= e($taskBadgeText); ?></span>
             </span>
         <?php } ?>
 

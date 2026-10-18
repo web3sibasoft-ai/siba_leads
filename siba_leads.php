@@ -21,6 +21,7 @@ hooks()->add_action('modules_loaded', 'siba_leads_load_helpers');
 hooks()->add_action('admin_init', 'siba_leads_init_menu');
 hooks()->add_action('admin_init', 'siba_leads_register_permissions');
 hooks()->add_filter('staff_permissions', 'siba_leads_filter_staff_permissions');
+hooks()->add_filter('relation_values', 'siba_leads_filter_relation_values');
 hooks()->add_action('admin_init', 'siba_leads_mark_csv_import_window');
 hooks()->add_action('admin_init', 'siba_leads_guard_maintenance_mode', 0);
 hooks()->add_action('admin_init', 'siba_leads_guard_duplicate_phone', 1);
@@ -198,6 +199,27 @@ function siba_leads_filter_staff_permissions($permissions, $data = [])
     return $permissions;
 }
 
+/**
+ * Point lead relation links (e.g. task modal "related to") at Siba Leads workspace.
+ *
+ * @param array $values
+ * @return array
+ */
+function siba_leads_filter_relation_values($values)
+{
+    $type = $values['type'] ?? '';
+    if ($type !== 'lead' && $type !== 'leads') {
+        return $values;
+    }
+
+    $id = (int) ($values['id'] ?? 0);
+    if ($id > 0) {
+        $values['link'] = admin_url('siba_leads?open_lead=' . $id);
+    }
+
+    return $values;
+}
+
 function siba_leads_init_menu()
 {
     $CI = &get_instance();
@@ -221,6 +243,13 @@ function siba_leads_init_menu()
             'name'     => _l('siba_leads_workspace'),
             'href'     => admin_url('siba_leads'),
             'position' => 99,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-successful',
+            'name'     => _l('siba_leads_successful'),
+            'href'     => admin_url('siba_leads/successful'),
+            'position' => 96,
         ]);
 
         $CI->app_menu->add_sidebar_children_item('leads', [
@@ -335,6 +364,19 @@ function siba_leads_ensure_leads_menu_children($items)
                 'name'        => _l('siba_leads_workspace'),
                 'href'        => admin_url('siba_leads'),
                 'position'    => 99,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
+        if ($canView && !in_array('siba-leads-successful', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-successful',
+                'name'        => _l('siba_leads_successful'),
+                'href'        => admin_url('siba_leads/successful'),
+                'position'    => 96,
                 'icon'        => '',
                 'badge'       => [],
                 'href_attrs'  => [],
@@ -503,7 +545,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.1-urgency') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.2-live-urgency') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -543,11 +585,12 @@ function siba_leads_load_admin_js()
         'pickProvinceFirst' => _l('siba_leads_pick_province_first'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsProfileLabels = ' . json_encode([
-        'nationalCode' => _l('siba_leads_national_code'),
-        'position'     => _l('siba_leads_position'),
-        'jobGroup'     => _l('siba_leads_job_group'),
-        'birthDate'    => _l('birth_date'),
-        'select'       => _l('dropdown_non_selected_tex'),
+        'nationalCode'  => _l('siba_leads_national_code'),
+        'phonenumber2'  => _l('siba_leads_phonenumber2'),
+        'position'      => _l('siba_leads_position'),
+        'jobGroup'      => _l('siba_leads_job_group'),
+        'birthDate'     => _l('birth_date'),
+        'select'        => _l('dropdown_non_selected_tex'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     $formMetaLabels = [
         'title'               => _l('siba_leads_website_form_info'),
@@ -611,7 +654,7 @@ function siba_leads_load_admin_js()
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMoveFailed = ' . json_encode(_l('siba_leads_move_failed'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.1-urgency') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.4-phonenumber2-view') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

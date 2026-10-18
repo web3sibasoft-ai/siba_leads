@@ -395,6 +395,9 @@ function siba_leads_get_summary(): array
     $urgencySql = function_exists('siba_leads_urgency_filter_sql')
         ? siba_leads_urgency_filter_sql($leadIdCol)
         : '';
+    $assignedSql = function_exists('siba_leads_assigned_filter_sql')
+        ? siba_leads_assigned_filter_sql()
+        : '';
     $sql        = '';
 
     $statuses[] = [
@@ -417,6 +420,7 @@ function siba_leads_get_summary(): array
 
         $sql .= $tagSql;
         $sql .= $urgencySql;
+        $sql .= $assignedSql;
 
         if (!$canViewAll) {
             $sql .= ' AND assigned=' . $staffId;
@@ -434,8 +438,13 @@ function siba_leads_get_summary(): array
     $urgency = function_exists('siba_leads_request_urgency_filter')
         ? siba_leads_request_urgency_filter()
         : '';
+    $assignedFilter = function_exists('siba_leads_request_assigned_filter')
+        ? siba_leads_request_assigned_filter()
+        : null;
     if (!$canViewAll) {
         $CI->db->where('assigned', $staffId);
+    } elseif ($assignedFilter !== null && function_exists('siba_leads_apply_assigned_filter_where')) {
+        siba_leads_apply_assigned_filter_where($CI->db, $assignedFilter);
     }
     if ($filter !== null) {
         siba_leads_apply_tag_filter_where($CI->db, $leadIdCol, $filter['tag_ids'], $filter['tag_none']);
@@ -579,7 +588,7 @@ function siba_leads_ensure_lead_columns(): void
     }
 
     // Schema version: bump when additive lead columns are introduced (e.g. industry_plan).
-    $schemaVersion = 2;
+    $schemaVersion = 3;
     $currentVersion = (int) get_option('siba_leads_schema_version');
     if ($currentVersion >= $schemaVersion && get_option('siba_leads_columns_ready') === '1') {
         $done = true;
@@ -1397,6 +1406,52 @@ function siba_leads_kanban_batch_enrich_leads(array $leads): array
     }
 
     return $leads;
+}
+
+/**
+ * Live kanban card urgency for one lead (same rules as batch enrich).
+ *
+ * @return array<string, mixed>|null
+ */
+function siba_leads_lead_card_urgency(int $leadId): ?array
+{
+    if ($leadId < 1) {
+        return null;
+    }
+
+    $enriched = siba_leads_kanban_batch_enrich_leads([['id' => $leadId]]);
+    if ($enriched === []) {
+        return null;
+    }
+
+    $lead = $enriched[0];
+    $taskStatus     = (string) ($lead['task_due_status'] ?? '');
+    $reminderStatus = (string) ($lead['reminder_due_status'] ?? '');
+    $cardUrgency    = (string) ($lead['card_urgency'] ?? '');
+
+    return [
+        'lead_id'              => $leadId,
+        'card_urgency'         => $cardUrgency,
+        'task_due_status'      => $taskStatus,
+        'task_due_count'       => (int) ($lead['task_due_count'] ?? 0),
+        'task_due_date'        => (string) ($lead['task_due_date'] ?? ''),
+        'reminder_due_status'  => $reminderStatus,
+        'reminder_due_count'   => (int) ($lead['reminder_due_count'] ?? 0),
+        'reminder_due_date'    => (string) ($lead['reminder_due_date'] ?? ''),
+        'reminder_on_lead'     => !empty($lead['reminder_on_lead']) ? 1 : 0,
+        'reminder_on_task'     => !empty($lead['reminder_on_task']) ? 1 : 0,
+        'my_active_tasks'      => (int) ($lead['my_active_tasks'] ?? 0),
+        'task_badge_text'      => $taskStatus === 'overdue'
+            ? _l('siba_leads_card_task_overdue', (int) ($lead['task_due_count'] ?? 0))
+            : ($taskStatus === 'today'
+                ? _l('siba_leads_card_task_today', (int) ($lead['task_due_count'] ?? 0))
+                : ''),
+        'task_badge_tooltip'   => $taskStatus === 'overdue'
+            ? _l('siba_leads_card_task_overdue_tooltip', (int) ($lead['task_due_count'] ?? 0))
+            : ($taskStatus === 'today'
+                ? _l('siba_leads_card_task_today_tooltip', (int) ($lead['task_due_count'] ?? 0))
+                : ''),
+    ];
 }
 
 /**
@@ -2880,6 +2935,81 @@ function siba_leads_kanban_apply_urgency_filter($kanBan)
 
     return $kanBan->tapQuery(static function ($status, $ci) use ($leadCol, $urgency) {
         siba_leads_apply_urgency_filter_where($ci->db, $leadCol, $urgency);
+    });
+}
+
+/**
+ * Read assignee filter from the current request (GET or POST).
+ * null = no filter; 0 = unassigned only; >0 = that staff id.
+ * Ignored for staff without view_all (they already see only their own leads).
+ */
+function siba_leads_request_assigned_filter(): ?int
+{
+    if (!siba_leads_can_view_all()) {
+        return null;
+    }
+
+    $CI  = &get_instance();
+    $raw = $CI->input->get_post('assigned');
+    if ($raw === null || $raw === '') {
+        $raw = $CI->input->get_post('siba_leads_assigned');
+    }
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+
+    return max(0, (int) $raw);
+}
+
+/**
+ * Raw SQL AND-fragment for the assignee filter (for UNION summaries).
+ */
+function siba_leads_assigned_filter_sql(string $assignedColumn = ''): string
+{
+    $assigned = siba_leads_request_assigned_filter();
+    if ($assigned === null) {
+        return '';
+    }
+
+    if ($assignedColumn === '') {
+        $assignedColumn = db_prefix() . 'leads.assigned';
+    }
+
+    return ' AND ' . $assignedColumn . '=' . (int) $assigned;
+}
+
+/**
+ * Apply assignee filter to a Query Builder instance.
+ *
+ * @param object $db CI database / query builder
+ */
+function siba_leads_apply_assigned_filter_where($db, ?int $assigned = null): void
+{
+    if ($assigned === null) {
+        $assigned = siba_leads_request_assigned_filter();
+    }
+    if ($assigned === null) {
+        return;
+    }
+
+    $db->where(db_prefix() . 'leads.assigned', (int) $assigned);
+}
+
+/**
+ * Attach assignee filter to a Siba kanban instance via tapQuery.
+ *
+ * @param \modules\siba_leads\services\SibaLeadsKanban $kanBan
+ * @return \modules\siba_leads\services\SibaLeadsKanban
+ */
+function siba_leads_kanban_apply_assigned_filter($kanBan)
+{
+    $assigned = siba_leads_request_assigned_filter();
+    if ($assigned === null) {
+        return $kanBan;
+    }
+
+    return $kanBan->tapQuery(static function ($status, $ci) use ($assigned) {
+        siba_leads_apply_assigned_filter_where($ci->db, $assigned);
     });
 }
 

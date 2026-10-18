@@ -11,6 +11,7 @@ function siba_leads_profile_columns(): array
 {
     return [
         'national_code' => "varchar(20) NULL DEFAULT ''",
+        'phonenumber2'  => "varchar(50) NULL DEFAULT ''",
         'job_group_id'  => 'INT(11) NOT NULL DEFAULT 0',
         'position_id'   => 'INT(11) NOT NULL DEFAULT 0',
     ];
@@ -86,6 +87,7 @@ function siba_leads_get_position_name($position_id): string
  * @param object|array|null $lead
  * @return array{
  *   national_code:string,
+ *   phonenumber2:string,
  *   job_group_id:int,
  *   job_group_name:string,
  *   position_id:int,
@@ -97,6 +99,7 @@ function siba_leads_get_position_name($position_id): string
 function siba_leads_resolve_lead_profile($lead): array
 {
     $national_code = '';
+    $phonenumber2  = '';
     $job_group_id  = 0;
     $position_id   = 0;
     $title         = '';
@@ -104,12 +107,14 @@ function siba_leads_resolve_lead_profile($lead): array
 
     if (is_object($lead)) {
         $national_code = trim((string) ($lead->national_code ?? ''));
+        $phonenumber2  = trim((string) ($lead->phonenumber2 ?? ''));
         $job_group_id  = (int) ($lead->job_group_id ?? 0);
         $position_id   = (int) ($lead->position_id ?? 0);
         $title         = trim((string) ($lead->title ?? ''));
         $birth_date    = trim((string) ($lead->birth_date ?? ''));
     } elseif (is_array($lead)) {
         $national_code = trim((string) ($lead['national_code'] ?? ''));
+        $phonenumber2  = trim((string) ($lead['phonenumber2'] ?? ''));
         $job_group_id  = (int) ($lead['job_group_id'] ?? 0);
         $position_id   = (int) ($lead['position_id'] ?? 0);
         $title         = trim((string) ($lead['title'] ?? ''));
@@ -139,6 +144,7 @@ function siba_leads_resolve_lead_profile($lead): array
 
     return [
         'national_code'  => $national_code,
+        'phonenumber2'   => $phonenumber2,
         'job_group_id'   => $job_group_id,
         'job_group_name' => $job_group_id > 0 ? siba_leads_get_job_group_name($job_group_id) : '',
         'position_id'    => $position_id,
@@ -155,6 +161,7 @@ function siba_leads_resolve_lead_profile($lead): array
 function siba_leads_sync_profile_fields(array $data): array
 {
     $data['national_code'] = trim((string) ($data['national_code'] ?? ''));
+    $data['phonenumber2']  = trim((string) ($data['phonenumber2'] ?? ''));
     $data['job_group_id']  = (int) ($data['job_group_id'] ?? 0);
     $data['position_id']   = (int) ($data['position_id'] ?? 0);
     $data['birth_date']    = trim((string) ($data['birth_date'] ?? ''));
@@ -230,19 +237,26 @@ function siba_leads_persist_profile_on_save($lead_id): void
         return;
     }
 
-    if (!$CI->db->field_exists('national_code', db_prefix() . 'leads')) {
+    $leadsTable = db_prefix() . 'leads';
+    if (!$CI->db->field_exists('national_code', $leadsTable) && !$CI->db->field_exists('phonenumber2', $leadsTable)) {
         return;
     }
 
     $data = siba_leads_sync_profile_fields($CI->input->post(null, true));
+    $update = [
+        'job_group_id' => (int) ($data['job_group_id'] ?? 0),
+        'position_id'  => (int) ($data['position_id'] ?? 0),
+        'title'        => (string) ($data['title'] ?? ''),
+        'birth_date'   => (string) ($data['birth_date'] ?? ''),
+    ];
+    if ($CI->db->field_exists('national_code', $leadsTable)) {
+        $update['national_code'] = (string) ($data['national_code'] ?? '');
+    }
+    if ($CI->db->field_exists('phonenumber2', $leadsTable)) {
+        $update['phonenumber2'] = (string) ($data['phonenumber2'] ?? '');
+    }
 
-    $CI->db->where('id', $lead_id)->update(db_prefix() . 'leads', [
-        'national_code' => (string) ($data['national_code'] ?? ''),
-        'job_group_id'  => (int) ($data['job_group_id'] ?? 0),
-        'position_id'   => (int) ($data['position_id'] ?? 0),
-        'title'         => (string) ($data['title'] ?? ''),
-        'birth_date'    => (string) ($data['birth_date'] ?? ''),
-    ]);
+    $CI->db->where('id', $lead_id)->update($leadsTable, $update);
 }
 
 /**

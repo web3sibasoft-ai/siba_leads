@@ -433,6 +433,11 @@
             }
         }
 
+        var assignedVal = $('select[name="siba_leads_assigned"]').val();
+        if (typeof assignedVal !== 'undefined' && assignedVal !== null && assignedVal !== '') {
+            parameters.assigned = String(assignedVal);
+        }
+
         var urgency = $('#siba_leads_urgency').val();
         if (typeof urgency !== 'undefined' && urgency !== '') {
             parameters.urgency = urgency;
@@ -1381,11 +1386,53 @@
     function getProfileLabels() {
         return window.sibaLeadsProfileLabels || {
             nationalCode: 'National ID',
+            phonenumber2: 'Second phone number',
             position: 'Position',
             jobGroup: 'Job group',
             birthDate: 'Birthday',
             select: 'Select'
         };
+    }
+
+    function ensureLeadPhone2Field($form, seed) {
+        var $existing = $form.find('#siba_lead_phonenumber2, input[name="phonenumber2"]').first();
+        if ($existing.length) {
+            if (!$existing.attr('id')) {
+                $existing.attr('id', 'siba_lead_phonenumber2');
+            }
+            if (seed && typeof seed.phonenumber2 !== 'undefined' && !$existing.val()) {
+                $existing.val(seed.phonenumber2 || '');
+            }
+            $existing.attr({ maxlength: 50, autocomplete: 'off', dir: 'ltr' });
+            var $phoneGroup = $form.find('input[name="phonenumber"]').closest('.form-group');
+            var $wrap = $existing.closest('.form-group');
+            if ($phoneGroup.length && $wrap.length && !$wrap.prev().is($phoneGroup)) {
+                $wrap.insertAfter($phoneGroup);
+            }
+            return $existing;
+        }
+
+        var labels = getProfileLabels();
+        var $phoneGroup = $form.find('input[name="phonenumber"]').closest('.form-group');
+        var $phone2Group = $('<div class="form-group siba-lead-profile-phonenumber2"></div>');
+        $phone2Group.append('<label class="control-label" for="siba_lead_phonenumber2">' + labels.phonenumber2 + '</label>');
+        var $phone2Input = $('<input>', {
+            type: 'text',
+            id: 'siba_lead_phonenumber2',
+            name: 'phonenumber2',
+            class: 'form-control',
+            maxlength: 50,
+            autocomplete: 'off',
+            dir: 'ltr',
+            value: seed ? (seed.phonenumber2 || '') : ''
+        });
+        $phone2Group.append($phone2Input);
+        if ($phoneGroup.length) {
+            $phone2Group.insertAfter($phoneGroup);
+        } else {
+            $form.find('.col-md-6').first().append($phone2Group);
+        }
+        return $phone2Input;
     }
 
     function getOrderRequiredFields() {
@@ -1951,9 +1998,20 @@
         }
 
         var nationalCode = seed ? (seed.national_code || '') : ($modal.find('#siba_lead_national_code').val() || '');
+        var $phone2Input = $modal.find('#siba_lead_phonenumber2, input[name="phonenumber2"]').first();
+        var phone2 = seed ? (seed.phonenumber2 || '') : ($phone2Input.val() || '');
         var birthDate = seed ? (seed.birth_date || '') : ($modal.find('#siba_lead_birth_date').val() || '');
         var jobGroupName = seed ? (seed.job_group_name || '') : ($modal.find('#siba_lead_job_group_id option:selected').text() || '');
         var positionName = seed ? (seed.position_name || seed.title || '') : ($modal.find('#siba_lead_position_id option:selected').text() || '');
+        if ($phone2Input.length) {
+            phone2 = $phone2Input.val() || phone2;
+        }
+        if (!phone2) {
+            phone2 = String($col.find('[data-siba-profile-value="phonenumber2"]').text() || '').trim();
+            if (phone2 === '-' || phone2 === '—') {
+                phone2 = '';
+            }
+        }
 
         if ($modal.find('#siba_lead_position_id').length) {
             var selectedPosition = $modal.find('#siba_lead_position_id option:selected').text();
@@ -1980,14 +2038,26 @@
             $titleDt.next('dd').text(positionName || '—');
         }
 
-        function ensureViewField(key, label, value) {
+        function ensureViewField(key, label, value, afterPhone) {
             var $existing = $col.find('dt[data-siba-profile="' + key + '"]');
             if (!$existing.length) {
-                var $companyDt = $col.find('dt.lead-field-heading').filter(function () {
-                    var text = normalizeLabel($(this).text());
-                    return text.indexOf('company') !== -1 || text.indexOf('شرکت') !== -1;
-                }).first();
-                if (!$companyDt.length) {
+                var $anchorDt = null;
+                if (afterPhone) {
+                    $anchorDt = $col.find('dt.lead-field-heading').filter(function () {
+                        var text = normalizeLabel($(this).text());
+                        return text.indexOf('phonenumber') !== -1
+                            || text.indexOf('phone') !== -1
+                            || text.indexOf('تلفن') !== -1
+                            || text.indexOf('موبایل') !== -1;
+                    }).first();
+                }
+                if (!$anchorDt || !$anchorDt.length) {
+                    $anchorDt = $col.find('dt.lead-field-heading').filter(function () {
+                        var text = normalizeLabel($(this).text());
+                        return text.indexOf('company') !== -1 || text.indexOf('شرکت') !== -1;
+                    }).first();
+                }
+                if (!$anchorDt.length) {
                     return;
                 }
                 $existing = $('<dt class="lead-field-heading tw-font-normal tw-text-neutral-500"></dt>')
@@ -1995,13 +2065,19 @@
                     .text(label);
                 var $dd = $('<dd class="tw-text-neutral-900 tw-mt-1"></dd>')
                     .attr('data-siba-profile-value', key);
-                $companyDt.next('dd').after($dd).after($existing);
+                $anchorDt.next('dd').after($dd).after($existing);
             }
             $existing.text(label);
-            $col.find('[data-siba-profile-value="' + key + '"]').text(value || '—');
+            var $value = $col.find('[data-siba-profile-value="' + key + '"]');
+            if (key === 'phonenumber2' && value) {
+                $value.html($('<a>', { href: 'tel:' + value, text: value }));
+            } else {
+                $value.text(value || '—');
+            }
         }
 
         ensureViewField('national_code', labels.nationalCode, nationalCode);
+        ensureViewField('phonenumber2', labels.phonenumber2, phone2, true);
         ensureViewField('birth_date', labels.birthDate, birthDate);
         ensureViewField('job_group', labels.jobGroup, jobGroupName);
     }
@@ -2140,6 +2216,7 @@
 
         if ($form.find('#siba_lead_national_code').length) {
             ensureLeadBirthDateField($form, window.sibaLeadProfileSeed || null);
+            ensureLeadPhone2Field($form, window.sibaLeadProfileSeed || null);
             refreshLeadProfilePickers($modal);
             updateLeadProfileView($modal);
             return;
@@ -2171,6 +2248,8 @@
         } else if ($form.find('input[name="name"]').length) {
             $positionGroup.insertAfter($form.find('input[name="name"]').closest('.form-group'));
         }
+
+        ensureLeadPhone2Field($form, seed);
 
         var $nationalGroup = $('<div class="form-group siba-lead-profile-national-code"></div>');
         $nationalGroup.append('<label class="control-label">' + labels.nationalCode + '</label>');
@@ -2255,6 +2334,7 @@
         var $position = $form.find('#siba_lead_position_id');
         var $jobGroup = $form.find('#siba_lead_job_group_id');
         var $national = $form.find('#siba_lead_national_code');
+        var $phone2 = ensureLeadPhone2Field($form, seed);
         var $birth = ensureLeadBirthDateField($form, seed);
 
         if (!$position.length) {
@@ -2264,6 +2344,9 @@
         if (seed) {
             if (!$national.val() && seed.national_code) {
                 $national.val(seed.national_code);
+            }
+            if ($phone2.length && !$phone2.val() && seed.phonenumber2) {
+                $phone2.val(seed.phonenumber2);
             }
             if ($birth.length && !$birth.val() && seed.birth_date) {
                 $birth.val(seed.birth_date);
@@ -2647,6 +2730,7 @@
         injectLeadProfileFields($modal);
         injectLeadFormMeta($modal);
         applyDefaultCountry($modal);
+        updateLeadProfileView($modal);
         hideEmptyProfileDashes($modal);
         bindLeadPhoneUnique($modal);
         ensureLeadModalSelectsEnabled($modal);
@@ -2945,6 +3029,156 @@
     // Expose for core main.js if present.
     window.reload_lead_modal_tasks_table = refreshLeadModalTasksTable;
 
+    /**
+     * Apply urgency payload to a visible siba lead kanban card (orange/red/normal).
+     */
+    function applySibaLeadCardUrgency(payload) {
+        if (!payload || !payload.success) {
+            return;
+        }
+
+        var leadId = parseInt(payload.lead_id, 10) || 0;
+        if (leadId < 1) {
+            return;
+        }
+
+        var $card = $('#kan-ban li.siba-lead-card[data-lead-id="' + leadId + '"], #kan-ban li.lead-kan-ban[data-lead-id="' + leadId + '"]');
+        if (!$card.length) {
+            return;
+        }
+
+        var urgency = String(payload.card_urgency || '');
+        var taskDue = String(payload.task_due_status || '');
+        var reminderDue = String(payload.reminder_due_status || '');
+
+        $card
+            .removeClass('has-today-reminder has-overdue-reminder')
+            .attr('data-urgency', urgency)
+            .attr('data-task-due', taskDue)
+            .attr('data-reminder-due', reminderDue);
+
+        if (urgency === 'overdue') {
+            $card.addClass('has-overdue-reminder');
+        } else if (urgency === 'today') {
+            $card.addClass('has-today-reminder');
+        }
+
+        // Keep the task-due badge in sync with recomputed counts.
+        var $taskBadge = $card.find('[data-siba-urgency-badge="task"]');
+        var taskCount = parseInt(payload.task_due_count, 10) || 0;
+        if (taskDue === 'today' || taskDue === 'overdue') {
+            var badgeClass = taskDue === 'overdue'
+                ? 'siba-lead-card__badge--reminder-overdue'
+                : 'siba-lead-card__badge--reminder-today';
+            var badgeText = payload.task_badge_text || '';
+            var badgeTip = payload.task_badge_tooltip || '';
+            if (!$taskBadge.length) {
+                $taskBadge = $('<span class="siba-lead-card__badge w-100" data-siba-urgency-badge="task" data-toggle="tooltip">'
+                    + '<i class="fa-regular fa-calendar-check"></i> '
+                    + '<span class="siba-lead-card__badge-text"></span></span>');
+                var $header = $card.find('.siba-lead-card__header').first();
+                if ($header.length) {
+                    $header.after($taskBadge);
+                } else {
+                    $card.find('.siba-lead-card__body, .lead-body').first().prepend($taskBadge);
+                }
+            }
+            $taskBadge
+                .removeClass('siba-lead-card__badge--reminder-today siba-lead-card__badge--reminder-overdue')
+                .addClass(badgeClass)
+                .attr('data-original-title', badgeTip)
+                .attr('title', badgeTip);
+            $taskBadge.find('.siba-lead-card__badge-text').text(badgeText);
+            if (typeof $taskBadge.tooltip === 'function') {
+                try {
+                    $taskBadge.tooltip('fix');
+                    $taskBadge.tooltip();
+                } catch (eTip) {
+                    // ignore
+                }
+            }
+        } else if ($taskBadge.length) {
+            if (typeof $taskBadge.tooltip === 'function') {
+                try {
+                    $taskBadge.tooltip('destroy');
+                } catch (eDestroy) {
+                    // ignore
+                }
+            }
+            $taskBadge.remove();
+        }
+
+        // Respect active urgency filter: hide cards that no longer match.
+        var filter = String($('#siba_leads_urgency').val() || '');
+        if (filter && !sibaLeadCardMatchesUrgencyFilter($card, filter, payload)) {
+            $card.fadeOut(180, function () {
+                $(this).remove();
+                if (typeof check_kanban_empty_col === 'function') {
+                    check_kanban_empty_col('[data-lead-id]');
+                }
+            });
+        }
+    }
+
+    function sibaLeadCardMatchesUrgencyFilter($card, filter, payload) {
+        filter = String(filter || '');
+        if (!filter || filter === 'all') {
+            return true;
+        }
+
+        var urgency = String((payload && payload.card_urgency) || $card.attr('data-urgency') || '');
+        var taskDue = String((payload && payload.task_due_status) || $card.attr('data-task-due') || '');
+        var reminderDue = String((payload && payload.reminder_due_status) || $card.attr('data-reminder-due') || '');
+        var myTasks = parseInt((payload && payload.my_active_tasks) || $card.attr('data-my-tasks') || 0, 10) || 0;
+
+        if (filter === 'today') {
+            return urgency === 'today';
+        }
+        if (filter === 'overdue') {
+            return urgency === 'overdue';
+        }
+        if (filter === 'due') {
+            return urgency === 'today' || urgency === 'overdue';
+        }
+        if (filter === 'task_due') {
+            return taskDue === 'today' || taskDue === 'overdue';
+        }
+        if (filter === 'reminder_due') {
+            return reminderDue === 'today' || reminderDue === 'overdue';
+        }
+        if (filter === 'my_tasks') {
+            return myTasks > 0 || $card.hasClass('has-my-active-task') || $card.attr('data-my-tasks') === '1';
+        }
+
+        return true;
+    }
+
+    /**
+     * After a related task due date/status change, refresh the lead card on the board.
+     */
+    function refreshSibaLeadCardUrgencyFromTask(relType, relId) {
+        if (String(relType) !== 'lead') {
+            return;
+        }
+        relId = parseInt(relId, 10) || 0;
+        if (relId < 1) {
+            return;
+        }
+        // Only when the siba/leads kanban is on screen.
+        if (!$('#kan-ban li.siba-lead-card, #kan-ban .siba-leads-kan-ban, .siba-leads-kan-ban').length
+            && !$('#kan-ban li[data-lead-id="' + relId + '"]').length) {
+            return;
+        }
+
+        $.getJSON(admin_url + 'siba_leads/kanban_card_urgency/' + relId)
+            .done(function (payload) {
+                applySibaLeadCardUrgency(payload);
+            });
+    }
+
+    window.siba_leads_refresh_card_urgency = refreshSibaLeadCardUrgencyFromTask;
+    window.siba_leads_apply_card_urgency = applySibaLeadCardUrgency;
+
     $(document).ajaxComplete(function (event, xhr, settings) {
         if (!settings || !settings.url) {
             return;
@@ -2962,6 +3196,22 @@
             setTimeout(function () {
                 applyLeadAssigneeToNewTask($('#_task_modal'));
             }, 150);
+        }
+
+        // Completing / reopening a task can clear or restore due-today/overdue highlight.
+        // (Inline due-date edits are handled from main.js via siba_leads_refresh_card_urgency.)
+        if ((settings.url.indexOf('tasks/mark_as') !== -1
+                || settings.url.indexOf('tasks/unmark_complete') !== -1)
+            && xhr
+            && xhr.status >= 200
+            && xhr.status < 300) {
+            var $taskHdr = $('#task-modal .task-single-header');
+            if ($taskHdr.length) {
+                refreshSibaLeadCardUrgencyFromTask(
+                    $taskHdr.attr('data-rel-type'),
+                    $taskHdr.attr('data-rel-id')
+                );
+            }
         }
 
         // Clear stuck Perfex .dt-loader after task assignee/status AJAX (job can succeed while overlay remains).
@@ -3387,7 +3637,7 @@
     }
 
     window.siba_leads_init_failed_jalali_filters = function () {
-        var $form = $('#siba-leads-failed-filters, #siba-leads-reports-filters');
+        var $form = $('#siba-leads-failed-filters, #siba-leads-successful-filters, #siba-leads-reports-filters');
         if (!$form.length) {
             return;
         }

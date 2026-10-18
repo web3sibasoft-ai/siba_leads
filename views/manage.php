@@ -72,12 +72,22 @@
 
                 <div class="siba-leads-filters">
                     <div class="siba-leads-filters__body">
-                        <div class="row siba-leads-filter-grid<?= !empty($pipelines) ? ' has-pipelines' : ''; ?>">
-                            <?php
-                            $pipelines = isset($pipelines) && is_array($pipelines) ? $pipelines : [];
-                            $activePipelineId = isset($active_pipeline_id) ? (string) $active_pipeline_id : '';
-                            $activePipelineTagId = isset($active_pipeline_tag_id) ? (int) $active_pipeline_tag_id : 0;
-                            if ($pipelines !== []) { ?>
+                        <?php
+                        $pipelines = isset($pipelines) && is_array($pipelines) ? $pipelines : [];
+                        $activePipelineId = isset($active_pipeline_id) ? (string) $active_pipeline_id : '';
+                        $activePipelineTagId = isset($active_pipeline_tag_id) ? (int) $active_pipeline_tag_id : 0;
+                        $staffOptions = isset($staff) && is_array($staff) ? $staff : [];
+                        $showAssigneeFilter = !empty($can_view_all) && $staffOptions !== [];
+                        $filterGridClass = 'row siba-leads-filter-grid';
+                        if ($pipelines !== []) {
+                            $filterGridClass .= ' has-pipelines';
+                        }
+                        if ($showAssigneeFilter) {
+                            $filterGridClass .= ' has-assignee';
+                        }
+                        ?>
+                        <div class="<?= e($filterGridClass); ?>">
+                            <?php if ($pipelines !== []) { ?>
                             <div class="col-md-4">
                                 <div class="form-group">
                                     <label for="siba_leads_pipeline_board" class="control-label">
@@ -106,7 +116,7 @@
                                 </div>
                             </div>
                             <?php } ?>
-                            <div class="<?= $pipelines !== [] ? 'col-md-5' : 'col-md-5'; ?>">
+                            <div class="col-md-5">
                                 <?php
                                 $tagOptions = isset($tags) && is_array($tags) ? $tags : [];
                                 $selectedTags = $activePipelineTagId > 0 ? [$activePipelineTagId] : '';
@@ -132,6 +142,31 @@
                                 );
                                 ?>
                             </div>
+                            <?php if ($showAssigneeFilter) { ?>
+                            <div class="col-md-4">
+                                <?php
+                                echo render_select(
+                                    'siba_leads_assigned',
+                                    $staffOptions,
+                                    ['staffid', ['firstname', 'lastname']],
+                                    'siba_leads_filter_assigned',
+                                    '',
+                                    [
+                                        'data-width'              => '100%',
+                                        'data-live-search'        => true,
+                                        'data-none-selected-text' => _l('siba_leads_filter_all_assignees'),
+                                        'onchange'                => $isKanBan
+                                            ? 'siba_leads_kanban_filter_changed();'
+                                            : 'siba_leads_list_filter_changed();',
+                                    ],
+                                    [],
+                                    '',
+                                    '',
+                                    true
+                                );
+                                ?>
+                            </div>
+                            <?php } ?>
                             <div class="col-md-3">
                                 <div class="checkbox checkbox-primary siba-leads-untagged">
                                     <input type="checkbox"
@@ -313,6 +348,7 @@ $(function () {
     var SibaLeadsServerParams = {};
     SibaLeadsServerParams['siba_leads_tags'] = '[name="siba_leads_tags[]"]';
     SibaLeadsServerParams['siba_leads_tag_none'] = '[name="siba_leads_tag_none"]:checked';
+    SibaLeadsServerParams['siba_leads_assigned'] = '[name="siba_leads_assigned"]';
     // Tags column (index 8) is not useful for search/sort — keep list snappy.
     initDataTable('.table-siba-leads', admin_url + 'siba_leads/table', [8], [8], SibaLeadsServerParams, [0, 'desc']);
 <?php } ?>
