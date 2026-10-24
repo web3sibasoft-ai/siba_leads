@@ -40,6 +40,10 @@
                                 <i class="fa-solid fa-grip-vertical"></i>
                                 <?php } ?>
                             </a>
+                            <a href="<?= admin_url('siba_leads/filtered'); ?>" class="btn btn-default">
+                                <i class="fa-solid fa-filter"></i>
+                                <?= _l('siba_leads_filtered'); ?>
+                            </a>
                             <a href="<?= admin_url('siba_leads/failed'); ?>" class="btn btn-default">
                                 <i class="fa-solid fa-circle-xmark"></i>
                                 <?= _l('siba_leads_failed'); ?>

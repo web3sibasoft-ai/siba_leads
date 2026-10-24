@@ -3710,7 +3710,7 @@
     }
 
     window.siba_leads_init_failed_jalali_filters = function () {
-        var $form = $('#siba-leads-failed-filters, #siba-leads-successful-filters, #siba-leads-reports-filters');
+        var $form = $('#siba-leads-failed-filters, #siba-leads-successful-filters, #siba-leads-reports-filters, #siba-leads-filtered-filters');
         if (!$form.length) {
             return;
         }

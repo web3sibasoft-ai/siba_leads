@@ -412,6 +412,16 @@ $lang['siba_leads_successful_date_to'] = 'تا تاریخ موفقیت';
 $lang['siba_leads_successful_search_hint'] = 'فیلدهای قابل جستجو: نام، تلفن، ایمیل، شرکت، مشتری.';
 $lang['siba_leads_successful_order'] = 'سفارش تایید‌شده';
 
+$lang['siba_leads_filtered'] = 'لیست فیلتر شده لیدها';
+$lang['siba_leads_filtered_desc'] = 'جستجوی همه لیدها با بازه ایجاد، منبع، شغل، شهر، وضعیت و سایر فیلترها.';
+$lang['siba_leads_filtered_empty'] = 'لیدی با این فیلترها یافت نشد.';
+$lang['siba_leads_filtered_apply_hint'] = 'فیلترها را انتخاب کنید و روی «فیلتر» بزنید تا لیدها بارگذاری شوند.';
+$lang['siba_leads_filtered_date_from'] = 'از تاریخ ایجاد';
+$lang['siba_leads_filtered_date_to'] = 'تا تاریخ ایجاد';
+$lang['siba_leads_filtered_search_hint'] = 'فیلدهای قابل جستجو: نام، تلفن، ایمیل، شرکت.';
+$lang['siba_leads_filtered_outcome'] = 'نتیجه';
+$lang['siba_leads_filtered_outcome_open'] = 'باز';
+
 $lang['siba_leads_mark_failed'] = 'اعلام شکست';
 $lang['siba_leads_mark_failed_hint'] = 'دلیل شکست را انتخاب کنید. سرنخ از کانبان خارج می‌شود.';
 $lang['siba_leads_mark_failed_confirm'] = 'اعلام به‌عنوان شکست‌خورده';

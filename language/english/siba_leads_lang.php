@@ -401,6 +401,16 @@ $lang['siba_leads_successful_date_to'] = 'Succeeded to';
 $lang['siba_leads_successful_search_hint'] = 'Searchable fields: name, phone, email, company, customer.';
 $lang['siba_leads_successful_order'] = 'Approved order';
 
+$lang['siba_leads_filtered'] = 'Filtered leads';
+$lang['siba_leads_filtered_desc'] = 'Search all leads with creation period, source, job, city, status, and more.';
+$lang['siba_leads_filtered_empty'] = 'No leads match these filters.';
+$lang['siba_leads_filtered_apply_hint'] = 'Choose filters and click Filter to load leads.';
+$lang['siba_leads_filtered_date_from'] = 'Created from';
+$lang['siba_leads_filtered_date_to'] = 'Created to';
+$lang['siba_leads_filtered_search_hint'] = 'Searchable fields: name, phone, email, company.';
+$lang['siba_leads_filtered_outcome'] = 'Outcome';
+$lang['siba_leads_filtered_outcome_open'] = 'Open';
+
 $lang['siba_leads_mark_failed'] = 'Mark as failed';
 $lang['siba_leads_mark_failed_hint'] = 'Select why this lead failed. The lead will leave the kanban.';
 $lang['siba_leads_mark_failed_confirm'] = 'Mark failed';

@@ -641,6 +641,289 @@ class Siba_leads extends AdminController
     }
 
     /**
+     * Full filtered leads list (all outcomes) with Jalali creation period and profile filters.
+     */
+    public function filtered()
+    {
+        close_setup_menu();
+
+        if (function_exists('siba_leads_ensure_lead_columns')) {
+            siba_leads_ensure_lead_columns();
+        }
+        if (!function_exists('siba_leads_reports_is_sale_sql')) {
+            $this->load->helper('siba_leads/siba_leads_reports');
+        }
+
+        $this->load->model('staff_model');
+
+        $tagIdsRaw = $this->input->get('tags');
+        $tagIds    = [];
+        if (is_array($tagIdsRaw)) {
+            foreach ($tagIdsRaw as $tid) {
+                $tid = (int) $tid;
+                if ($tid > 0) {
+                    $tagIds[] = $tid;
+                }
+            }
+            $tagIds = array_values(array_unique($tagIds));
+        } elseif (is_numeric($tagIdsRaw) && (int) $tagIdsRaw > 0) {
+            $tagIds = [(int) $tagIdsRaw];
+        }
+
+        $assignedRaw = $this->input->get('assigned');
+        $filters     = [
+            'date_from'    => trim((string) $this->input->get('date_from')),
+            'date_to'      => trim((string) $this->input->get('date_to')),
+            'source'       => (int) $this->input->get('source'),
+            'job_group_id' => (int) $this->input->get('job_group_id'),
+            'province_id'  => (int) $this->input->get('province_id'),
+            'city_id'      => (int) $this->input->get('city_id'),
+            'status'       => (int) $this->input->get('status'),
+            'assigned'     => ($assignedRaw === null || $assignedRaw === '') ? null : (int) $assignedRaw,
+            'tags'         => $tagIds,
+            'outcome'      => trim((string) $this->input->get('outcome')),
+            'q'            => trim((string) $this->input->get('q')),
+        ];
+        if (!in_array($filters['outcome'], ['open', 'failed', 'success'], true)) {
+            $filters['outcome'] = '';
+        }
+
+        // Only query after the user submits filters — avoids loading thousands of rows on first open.
+        $hasFilterRequest = $this->input->get('filter') !== null
+            || $filters['date_from'] !== ''
+            || $filters['date_to'] !== ''
+            || $filters['source'] > 0
+            || $filters['job_group_id'] > 0
+            || $filters['province_id'] > 0
+            || $filters['city_id'] > 0
+            || $filters['status'] > 0
+            || $filters['assigned'] !== null
+            || $filters['tags'] !== []
+            || $filters['outcome'] !== ''
+            || $filters['q'] !== '';
+
+        $prefix    = db_prefix();
+        $leadsT    = $prefix . 'leads';
+        $statusT   = $prefix . 'leads_status';
+        $sourceT   = $prefix . 'leads_sources';
+        $staffT    = $prefix . 'staff';
+        $jobT      = $prefix . 'siba_job_groups';
+        $provT     = $prefix . 'siba_provinces';
+        $cityT     = $prefix . 'siba_cities';
+        $taggables = $prefix . 'taggables';
+        $tagsT     = $prefix . 'tags';
+
+        $hasJobCol  = $this->db->field_exists('job_group_id', $leadsT);
+        $hasProvCol = $this->db->field_exists('province_id', $leadsT);
+        $hasCityCol = $this->db->field_exists('city_id', $leadsT);
+        $hasJobT    = $this->db->table_exists($jobT);
+        $hasProvT   = $this->db->table_exists($provT);
+        $hasCityT   = $this->db->table_exists($cityT);
+        $hasOutcome = $this->db->field_exists('siba_outcome', $leadsT);
+
+        $leads = [];
+        if ($hasFilterRequest) {
+            $tagsSubquery = '(SELECT GROUP_CONCAT(' . $tagsT . '.name ORDER BY ' . $taggables . '.tag_order ASC SEPARATOR ",")'
+                . ' FROM ' . $taggables
+                . ' JOIN ' . $tagsT . ' ON ' . $taggables . '.tag_id = ' . $tagsT . '.id'
+                . ' WHERE ' . $taggables . '.rel_id = ' . $leadsT . '.id AND ' . $taggables . '.rel_type="lead") as tags';
+
+            $select = $leadsT . '.id, ' . $leadsT . '.name, ' . $leadsT . '.company, ' . $leadsT . '.phonenumber, '
+                . $leadsT . '.email, ' . $leadsT . '.assigned, ' . $leadsT . '.status, ' . $leadsT . '.source, '
+                . $leadsT . '.dateadded, ' . $leadsT . '.lost, ' . $leadsT . '.junk, ' . $leadsT . '.date_converted, '
+                . $statusT . '.name as status_name, ' . $statusT . '.color as status_color, '
+                . $sourceT . '.name as source_name, '
+                . $staffT . '.firstname as assigned_firstname, ' . $staffT . '.lastname as assigned_lastname, '
+                . $tagsSubquery;
+
+            if ($hasOutcome) {
+                $select .= ', ' . $leadsT . '.siba_outcome';
+            }
+            if ($hasJobT && $hasJobCol) {
+                $select .= ', ' . $jobT . '.siba_job_group_name as job_group_name';
+            }
+            if ($hasProvT && $hasProvCol) {
+                $select .= ', ' . $provT . '.province_name as province_name, ' . $leadsT . '.state';
+            } else {
+                $select .= ', ' . $leadsT . '.state';
+            }
+            if ($hasCityT && $hasCityCol) {
+                $select .= ', ' . $cityT . '.city_name as city_name, ' . $leadsT . '.city';
+            } else {
+                $select .= ', ' . $leadsT . '.city';
+            }
+
+            $this->db->select($select, false);
+            $this->db->from($leadsT);
+            $this->db->join($statusT, $statusT . '.id = ' . $leadsT . '.status', 'left');
+            $this->db->join($sourceT, $sourceT . '.id = ' . $leadsT . '.source', 'left');
+            $this->db->join($staffT, $staffT . '.staffid = ' . $leadsT . '.assigned', 'left');
+            if ($hasJobT && $hasJobCol) {
+                $this->db->join($jobT, $jobT . '.siba_job_group_id = ' . $leadsT . '.job_group_id', 'left');
+            }
+            if ($hasProvT && $hasProvCol) {
+                $this->db->join($provT, $provT . '.province_id = ' . $leadsT . '.province_id', 'left');
+            }
+            if ($hasCityT && $hasCityCol) {
+                $this->db->join($cityT, $cityT . '.city_id = ' . $leadsT . '.city_id', 'left');
+            }
+
+            if (!siba_leads_can_view_all()) {
+                $this->db->where($leadsT . '.assigned', (int) get_staff_user_id());
+            } elseif ($filters['assigned'] !== null) {
+                $this->db->where($leadsT . '.assigned', (int) $filters['assigned']);
+            }
+
+            if ($filters['source'] > 0) {
+                $this->db->where($leadsT . '.source', $filters['source']);
+            }
+            if ($filters['status'] > 0) {
+                $this->db->where($leadsT . '.status', $filters['status']);
+            }
+            if ($filters['job_group_id'] > 0 && $hasJobCol) {
+                $this->db->where($leadsT . '.job_group_id', $filters['job_group_id']);
+            }
+            if ($filters['province_id'] > 0 && $hasProvCol) {
+                $this->db->where($leadsT . '.province_id', $filters['province_id']);
+            }
+            if ($filters['city_id'] > 0 && $hasCityCol) {
+                $this->db->where($leadsT . '.city_id', $filters['city_id']);
+            }
+
+            if ($filters['tags'] !== []) {
+                $this->db->where(
+                    $leadsT . '.id IN (SELECT rel_id FROM ' . $taggables
+                    . " WHERE rel_type = 'lead' AND tag_id IN (" . implode(',', array_map('intval', $filters['tags'])) . '))',
+                    null,
+                    false
+                );
+            }
+
+            if ($filters['outcome'] === 'open') {
+                $this->db->where(siba_leads_kanban_open_where_sql($leadsT), null, false);
+                if ($hasOutcome) {
+                    $this->db->where(
+                        '(COALESCE(' . $leadsT . ".siba_outcome, '') <> 'failed'"
+                        . ' AND COALESCE(' . $leadsT . ".siba_outcome, '') <> 'success')",
+                        null,
+                        false
+                    );
+                }
+            } elseif ($filters['outcome'] === 'failed') {
+                $this->db->where(siba_leads_reports_is_failed_sql($leadsT), null, false);
+            } elseif ($filters['outcome'] === 'success') {
+                $this->db->where(siba_leads_reports_is_sale_sql($leadsT), null, false);
+            }
+
+            if ($filters['date_from'] !== '') {
+                if (!function_exists('to_sql_date_custom')) {
+                    $this->load->helper('siba_license/siba_license');
+                }
+                $fromRaw = function_exists('siba_license_to_latin_digits')
+                    ? siba_license_to_latin_digits($filters['date_from'])
+                    : $filters['date_from'];
+                $from = function_exists('to_sql_date_custom')
+                    ? to_sql_date_custom($fromRaw)
+                    : to_sql_date($fromRaw);
+                if (is_string($from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
+                    $this->db->where($leadsT . '.dateadded >=', $from . ' 00:00:00');
+                    if (function_exists('to_view_date_custom')) {
+                        $viewFrom = to_view_date_custom($from);
+                        if ($viewFrom) {
+                            $filters['date_from'] = $viewFrom;
+                        }
+                    }
+                } else {
+                    $filters['date_from'] = '';
+                }
+            }
+            if ($filters['date_to'] !== '') {
+                if (!function_exists('to_sql_date_custom')) {
+                    $this->load->helper('siba_license/siba_license');
+                }
+                $toRaw = function_exists('siba_license_to_latin_digits')
+                    ? siba_license_to_latin_digits($filters['date_to'])
+                    : $filters['date_to'];
+                $to = function_exists('to_sql_date_custom')
+                    ? to_sql_date_custom($toRaw)
+                    : to_sql_date($toRaw);
+                if (is_string($to) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+                    $this->db->where($leadsT . '.dateadded <=', $to . ' 23:59:59');
+                    if (function_exists('to_view_date_custom')) {
+                        $viewTo = to_view_date_custom($to);
+                        if ($viewTo) {
+                            $filters['date_to'] = $viewTo;
+                        }
+                    }
+                } else {
+                    $filters['date_to'] = '';
+                }
+            }
+
+            if ($filters['q'] !== '') {
+                $q = $this->db->escape_like_str($filters['q']);
+                $this->db->group_start();
+                $this->db->like($leadsT . '.name', $q);
+                $this->db->or_like($leadsT . '.phonenumber', $q);
+                $this->db->or_like($leadsT . '.email', $q);
+                $this->db->or_like($leadsT . '.company', $q);
+                $this->db->group_end();
+            }
+
+            $this->db->order_by($leadsT . '.dateadded', 'DESC');
+            $this->db->order_by($leadsT . '.id', 'DESC');
+            $this->db->limit(1000);
+            $query = $this->db->get();
+            if ($query !== false) {
+                $leads = $query->result_array();
+            }
+        }
+
+        $outcomeOptions = [
+            ['id' => 'open', 'name' => _l('siba_leads_filtered_outcome_open')],
+            ['id' => 'failed', 'name' => _l('siba_leads_outcome_failed')],
+            ['id' => 'success', 'name' => _l('siba_leads_outcome_success')],
+        ];
+
+        $canViewAll = siba_leads_can_view_all();
+        $staffRows  = [];
+        if ($canViewAll) {
+            $staffRows = $this->staff_model->get('', ['active' => 1, 'is_not_staff' => 0]);
+            if (!is_array($staffRows)) {
+                $staffRows = [];
+            }
+            array_unshift($staffRows, [
+                'staffid'   => '0',
+                'firstname' => _l('siba_leads_unassigned'),
+                'lastname'  => '',
+            ]);
+        }
+
+        $provinces = function_exists('siba_leads_get_active_provinces') ? siba_leads_get_active_provinces() : [];
+        $cities    = ($filters['province_id'] > 0 && function_exists('siba_leads_get_active_cities'))
+            ? siba_leads_get_active_cities($filters['province_id'])
+            : [];
+
+        $data['title']              = _l('siba_leads_filtered');
+        $data['leads']              = $leads;
+        $data['filters']            = $filters;
+        $data['has_filter_request'] = $hasFilterRequest;
+        $data['can_view_all']       = $canViewAll;
+        $data['staff']              = $staffRows;
+        $data['statuses']           = $this->leads_model->get_status();
+        $data['sources']            = $this->leads_model->get_source();
+        $data['job_groups']         = function_exists('siba_leads_get_active_job_groups')
+            ? siba_leads_get_active_job_groups()
+            : [];
+        $data['provinces']          = $provinces;
+        $data['cities']             = $cities;
+        $data['tags']               = function_exists('get_tags') ? get_tags() : [];
+        $data['outcome_options']    = $outcomeOptions;
+
+        $this->load->view('siba_leads/filtered/manage', $data);
+    }
+
+    /**
      * Aggregated lead reports (analysis / incoming / pipeline / conversion / speed / sources / failures / sales).
      */
     public function reports()

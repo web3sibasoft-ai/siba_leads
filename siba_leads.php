@@ -247,6 +247,13 @@ function siba_leads_init_menu()
         ]);
 
         $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-filtered',
+            'name'     => _l('siba_leads_filtered'),
+            'href'     => admin_url('siba_leads/filtered'),
+            'position' => 95,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-successful',
             'name'     => _l('siba_leads_successful'),
             'href'     => admin_url('siba_leads/successful'),
@@ -382,6 +389,27 @@ function siba_leads_ensure_leads_menu_children($items)
                 'badge'       => [],
                 'href_attrs'  => [],
             ];
+        }
+
+        if ($canView && !in_array('siba-leads-filtered', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-filtered',
+                'name'        => _l('siba_leads_filtered'),
+                'href'        => admin_url('siba_leads/filtered'),
+                'position'    => 95,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        } elseif ($canView) {
+            foreach ($children as $cIdx => $child) {
+                if (($child['slug'] ?? '') === 'siba-leads-filtered') {
+                    $children[$cIdx]['href'] = admin_url('siba_leads/filtered');
+                    $children[$cIdx]['name'] = _l('siba_leads_filtered');
+                    break;
+                }
+            }
         }
 
         if ($canView && !in_array('siba-leads-successful', $slugs, true)) {
