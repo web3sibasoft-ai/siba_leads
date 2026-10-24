@@ -876,6 +876,7 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
 }
 
 .siba-lead-card__actions > .siba-lead-card__follow-btn,
+.siba-lead-card__actions > .siba-lead-card__ai-btn,
 .siba-lead-card__actions > .siba-lead-card__order-btn {
     flex: 1 1 0;
     margin-top: 0;
@@ -902,6 +903,50 @@ html[dir="rtl"] .siba-lead-card__assignee-link {
     background: #e2e8f0;
     color: #0f172a;
     text-decoration: none !important;
+}
+
+.siba-lead-card__ai-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid #c4b5fd;
+    background: #f5f3ff;
+    color: #5b21b6;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none !important;
+}
+
+.siba-lead-card__ai-btn:hover,
+.siba-lead-card__ai-btn:focus {
+    background: #ede9fe;
+    color: #4c1d95;
+    text-decoration: none !important;
+}
+
+.siba-lead-card__ai-btn.is-loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.siba-ai-call-guide-modal .siba-ai-call-guide-body {
+    white-space: pre-wrap;
+    line-height: 1.7;
+    font-size: 13px;
+    color: #1e293b;
+    max-height: 70vh;
+    overflow-y: auto;
+    direction: rtl;
+    text-align: right;
+}
+
+.siba-ai-call-guide-modal .siba-ai-call-guide-loading {
+    padding: 28px 12px;
+    text-align: center;
+    color: #64748b;
 }
 
 .siba-lead-card__order-btn {

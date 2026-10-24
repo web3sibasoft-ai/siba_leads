@@ -58,6 +58,19 @@ if (get_option('siba_leads_didar_sync_lock') === false) {
     add_option('siba_leads_didar_sync_lock', '');
 }
 
+if (get_option('siba_leads_openrouter_api_key') === false) {
+    add_option('siba_leads_openrouter_api_key', '');
+}
+$sibaLeadsOrModel = get_option('siba_leads_openrouter_model');
+if ($sibaLeadsOrModel === false) {
+    add_option('siba_leads_openrouter_model', 'recursive/flint-v1.0:free');
+} elseif ($sibaLeadsOrModel === '') {
+    update_option('siba_leads_openrouter_model', 'recursive/flint-v1.0:free');
+}
+if (get_option('siba_leads_openrouter_ssl_verify') === false) {
+    add_option('siba_leads_openrouter_ssl_verify', '1');
+}
+
 // Temporary Didar user id on staff (UUID) — reinstall-safe
 if ($CI->db->table_exists(db_prefix() . 'staff')
     && !$CI->db->field_exists('didar_id', db_prefix() . 'staff')) {

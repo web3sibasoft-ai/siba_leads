@@ -382,6 +382,16 @@ $reminderDueAttr = $hasDueReminder ? e($reminderDueStatus) : '';
                 <i class="fa-regular fa-comments"></i>
                 <span><?= _l('siba_leads_card_follow_lead'); ?></span>
             </a>
+            <?php if (is_admin() || staff_can('ai_call_guide', SIBA_LEADS_MODULE_NAME)) { ?>
+                <a href="#"
+                    class="siba-lead-card__ai-btn"
+                    onclick="event.stopPropagation(); if (typeof siba_leads_ai_call_guide === 'function') { siba_leads_ai_call_guide(<?= (int) $lead['id']; ?>); } return false;"
+                    onmousedown="event.stopPropagation();"
+                    title="<?= e(_l('siba_leads_card_ai_call_guide')); ?>">
+                    <i class="fa-solid fa-headset"></i>
+                    <span><?= _l('siba_leads_card_ai_call_guide'); ?></span>
+                </a>
+            <?php } ?>
             <?php if (staff_can('creat_order', 'siba_license')) {
                 $activeOrderId = (int) ($lead['active_order_id'] ?? 0);
                 if ($activeOrderId > 0) {

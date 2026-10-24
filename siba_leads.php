@@ -5,13 +5,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Siba Leads
 Description: Lead extensions without changing Perfex core.
-Version: 1.1.0
+Version: 1.2.0
 Requires at least: 3.0.*
 Author: Siba
 */
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
-define('SIBA_LEADS_VERSION', '1.1.0');
+define('SIBA_LEADS_VERSION', '1.2.0');
 hooks()->add_action('admin_init', 'siba_leads_sync_release_version', 99);
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
@@ -165,6 +165,7 @@ function siba_leads_register_permissions()
         'restore_failed' => _l('siba_leads_permission_restore_failed'),
         'view_reports'   => _l('siba_leads_permission_view_reports'),
         'manage_teams'   => _l('siba_leads_permission_manage_teams'),
+        'ai_call_guide'  => _l('siba_leads_permission_ai_call_guide'),
     ];
 
     // Individual report pages (tabs). Staff need the matching capability, or view_reports for all.
@@ -289,6 +290,13 @@ function siba_leads_init_menu()
 
     if (is_admin()) {
         $CI->app_menu->add_sidebar_children_item('leads', [
+            'slug'     => 'siba-leads-ai-settings',
+            'name'     => _l('siba_leads_ai_settings'),
+            'href'     => admin_url('siba_leads/ai_settings'),
+            'position' => 104,
+        ]);
+
+        $CI->app_menu->add_sidebar_children_item('leads', [
             'slug'     => 'siba-leads-didar',
             'name'     => _l('siba_leads_didar_migration'),
             'href'     => admin_url('siba_leads/didar'),
@@ -319,6 +327,12 @@ function siba_leads_init_menu()
             'name'     => _l('siba_leads_tags'),
             'href'     => admin_url('siba_leads/tags'),
             'position' => 38,
+        ]);
+
+        $CI->app_menu->add_setup_menu_item('siba-leads-ai-settings', [
+            'name'     => _l('siba_leads_ai_settings'),
+            'href'     => admin_url('siba_leads/ai_settings'),
+            'position' => 39,
         ]);
     }
 }
@@ -464,6 +478,19 @@ function siba_leads_ensure_leads_menu_children($items)
             ];
         }
 
+        if (is_admin() && !in_array('siba-leads-ai-settings', $slugs, true)) {
+            $children[] = [
+                'parent_slug' => 'leads',
+                'slug'        => 'siba-leads-ai-settings',
+                'name'        => _l('siba_leads_ai_settings'),
+                'href'        => admin_url('siba_leads/ai_settings'),
+                'position'    => 104,
+                'icon'        => '',
+                'badge'       => [],
+                'href_attrs'  => [],
+            ];
+        }
+
         $items[$key]['children'] = $children;
         break;
     }
@@ -488,6 +515,7 @@ function siba_leads_ensure_setup_teams_menu($items)
     $haveTeams = false;
     $haveReasons = false;
     $haveTags = false;
+    $haveAiSettings = false;
     foreach ($items as $item) {
         $slug = $item['slug'] ?? '';
         if ($slug === 'siba-leads-teams') {
@@ -498,6 +526,9 @@ function siba_leads_ensure_setup_teams_menu($items)
         }
         if ($slug === 'siba-leads-tags') {
             $haveTags = true;
+        }
+        if ($slug === 'siba-leads-ai-settings') {
+            $haveAiSettings = true;
         }
     }
 
@@ -540,12 +571,25 @@ function siba_leads_ensure_setup_teams_menu($items)
         ];
     }
 
+    if (is_admin() && !$haveAiSettings) {
+        $items['siba-leads-ai-settings'] = [
+            'slug'       => 'siba-leads-ai-settings',
+            'name'       => _l('siba_leads_ai_settings'),
+            'href'       => admin_url('siba_leads/ai_settings'),
+            'position'   => 39,
+            'icon'       => 'fa fa-robot',
+            'badge'      => [],
+            'href_attrs' => [],
+            'children'   => [],
+        ];
+    }
+
     return $items;
 }
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.1.2-live-urgency') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.2.0-ai-call-guide') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -654,7 +698,12 @@ function siba_leads_load_admin_js()
         'loadError' => _l('siba_leads_timeline_load_error'),
     ], JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsMoveFailed = ' . json_encode(_l('siba_leads_move_failed'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.1.4-phonenumber2-view') . '"></script>';
+    echo '<script>window.sibaLeadsAiCallGuideTitle = ' . json_encode(_l('siba_leads_card_ai_call_guide'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsAiCallGuideLoading = ' . json_encode(_l('siba_leads_ai_call_guide_loading'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsAiCallGuideClose = ' . json_encode(_l('close'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsAiCallGuideError = ' . json_encode(_l('siba_leads_ai_call_guide_api_error'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script>window.sibaLeadsAiCallGuideDenied = ' . json_encode(_l('siba_leads_ai_call_guide_denied'), JSON_UNESCAPED_UNICODE) . ';</script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.2.0-ai-call-guide') . '"></script>';
 }
 
 function siba_leads_action_links($actions)
@@ -685,5 +734,18 @@ function siba_leads_sync_release_version(): void
     $row = $CI->db->select('installed_version')->where('module_name', SIBA_LEADS_MODULE_NAME)->get(db_prefix() . 'modules')->row_array();
     if ($row && version_compare((string) $row['installed_version'], SIBA_LEADS_VERSION, '<')) {
         $CI->db->where('module_name', SIBA_LEADS_MODULE_NAME)->where('installed_version', $row['installed_version'])->update(db_prefix() . 'modules', ['installed_version' => SIBA_LEADS_VERSION]);
+    }
+
+    if (get_option('siba_leads_openrouter_api_key') === false) {
+        add_option('siba_leads_openrouter_api_key', '');
+    }
+    $orModel = get_option('siba_leads_openrouter_model');
+    if ($orModel === false) {
+        add_option('siba_leads_openrouter_model', 'recursive/flint-v1.0:free');
+    } elseif ($orModel === '') {
+        update_option('siba_leads_openrouter_model', 'recursive/flint-v1.0:free');
+    }
+    if (get_option('siba_leads_openrouter_ssl_verify') === false) {
+        add_option('siba_leads_openrouter_ssl_verify', '1');
     }
 }

@@ -19,11 +19,11 @@ class Siba_leads extends AdminController
             if (!siba_leads_can_manage_teams()) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
-        } elseif (in_array($method, ['didar', 'didar_wipe', 'didar_import', 'didar_migrate', 'didar_test'], true)) {
+        } elseif (in_array($method, ['didar', 'didar_wipe', 'didar_import', 'didar_migrate', 'didar_test', 'ai_settings'], true)) {
             if (!is_admin()) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
-        } elseif (!in_array($method, ['validate_phone', 'get_cities', 'timeline', 'kanban_card_details'], true)) {
+        } elseif (!in_array($method, ['validate_phone', 'get_cities', 'timeline', 'kanban_card_details', 'ai_call_guide'], true)) {
             if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
                 access_denied(SIBA_LEADS_MODULE_NAME);
             }
@@ -927,6 +927,43 @@ class Siba_leads extends AdminController
     }
 
     /**
+     * AI Persian sales call-guide for a kanban lead (OpenRouter).
+     *
+     * @param int $id Lead id
+     */
+    public function ai_call_guide($id = 0)
+    {
+        if (!$this->input->is_ajax_request()) {
+            show_404();
+        }
+
+        if (!is_admin() && !staff_can('ai_call_guide', SIBA_LEADS_MODULE_NAME)) {
+            ajax_access_denied();
+        }
+
+        if (!is_admin() && !staff_can('view', SIBA_LEADS_MODULE_NAME)) {
+            ajax_access_denied();
+        }
+
+        $id = (int) $id;
+        if ($id < 1 || !siba_leads_can_manage_lead($id)) {
+            ajax_access_denied();
+        }
+
+        $this->load->library('siba_leads/Siba_leads_ai_call_guide', null, 'siba_leads_ai_call_guide');
+        $result = $this->siba_leads_ai_call_guide->generate_for_lead($id);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'success' => !empty($result['success']),
+            'content' => (string) ($result['content'] ?? ''),
+            'message' => (string) ($result['message'] ?? ''),
+            'prompt' => (string) ($result['prompt'] ?? ''),
+            'lead_id' => $id,
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
      * JSON urgency payload for live kanban card updates (e.g. after task due date change).
      *
      * @param int $id Lead id
@@ -1284,6 +1321,61 @@ class Siba_leads extends AdminController
 
         set_alert('success', _l('deleted', _l('siba_leads_tag')));
         redirect(admin_url('siba_leads/tags'));
+    }
+
+    /**
+     * AI call-guide (OpenRouter) settings — API key + model.
+     */
+    public function ai_settings()
+    {
+        if ($this->input->post('save_ai_settings')) {
+            $postedKey = trim((string) $this->input->post('openrouter_api_key'));
+            if ($postedKey !== '') {
+                update_option('siba_leads_openrouter_api_key', $postedKey);
+            }
+
+            $this->load->library('siba_leads/Siba_leads_ai_call_guide', null, 'siba_leads_ai_call_guide');
+            $defaultModel = Siba_leads_ai_call_guide::DEFAULT_MODEL;
+
+            $model = trim((string) $this->input->post('openrouter_model'));
+            if ($model === '') {
+                $model = $defaultModel;
+            }
+            update_option('siba_leads_openrouter_model', $model);
+
+            update_option(
+                'siba_leads_openrouter_ssl_verify',
+                $this->input->post('openrouter_ssl_verify') === '1' ? '1' : '0'
+            );
+
+            set_alert('success', _l('settings_updated'));
+            redirect(admin_url('siba_leads/ai_settings'));
+        }
+
+        $this->load->library('siba_leads/Siba_leads_ai_call_guide', null, 'siba_leads_ai_call_guide');
+        $defaultModel = Siba_leads_ai_call_guide::DEFAULT_MODEL;
+
+        $apiKey = trim((string) get_option('siba_leads_openrouter_api_key'));
+        $model  = trim((string) get_option('siba_leads_openrouter_model'));
+        if ($model === '') {
+            $model = $defaultModel;
+        }
+
+        $sslOpt = get_option('siba_leads_openrouter_ssl_verify');
+        if ($sslOpt === false || $sslOpt === null || $sslOpt === '') {
+            $sslVerify = function_exists('siba_leads_didar_ssl_verify_enabled')
+                ? siba_leads_didar_ssl_verify_enabled()
+                : true;
+        } else {
+            $sslVerify = (string) $sslOpt === '1';
+        }
+
+        $data['title']                 = _l('siba_leads_ai_settings');
+        $data['openrouter_model']      = $model;
+        $data['api_key_configured']    = $apiKey !== '';
+        $data['openrouter_ssl_verify'] = $sslVerify;
+
+        $this->load->view('siba_leads/ai_settings', $data);
     }
 
     /**

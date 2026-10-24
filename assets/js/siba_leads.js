@@ -2,7 +2,7 @@
     'use strict';
 
     window.sibaLeads = window.sibaLeads || {
-        version: '1.1.0',
+        version: '1.2.0',
         hideLeadFields: window.sibaLeadsHideLeadFields || {}
     };
 
@@ -519,6 +519,79 @@
                 $col.attr('data-siba-loaded', '1');
                 siba_leads_sync_column_empty_state($col);
             });
+    };
+
+    window.siba_leads_ai_call_guide = function (leadId) {
+        leadId = parseInt(leadId, 10) || 0;
+        if (!leadId) {
+            return;
+        }
+
+        var $wrap = $('#siba-leads-ai-call-guide-wrap');
+        if (!$wrap.length) {
+            $wrap = $('<div id="siba-leads-ai-call-guide-wrap"></div>').appendTo('body');
+        }
+
+        var title = (window.sibaLeadsAiCallGuideTitle || 'راهنمای تماس هوشمند');
+        var loadingText = (window.sibaLeadsAiCallGuideLoading || 'در حال ساخت راهنمای تماس…');
+        var closeLabel = (window.sibaLeadsAiCallGuideClose || 'بستن');
+
+        $wrap.html(
+            '<div class="modal fade siba-ai-call-guide-modal" id="siba-ai-call-guide-modal" tabindex="-1" role="dialog">' +
+            '<div class="modal-dialog modal-lg" role="document">' +
+            '<div class="modal-content">' +
+            '<div class="modal-header">' +
+            '<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+            '<h4 class="modal-title">' + $('<div/>').text(title).html() + ' <small class="text-muted">#' + leadId + '</small></h4>' +
+            '</div>' +
+            '<div class="modal-body">' +
+            '<div class="siba-ai-call-guide-loading"><i class="fa fa-spinner fa-spin"></i> ' + $('<div/>').text(loadingText).html() + '</div>' +
+            '<div class="siba-ai-call-guide-body hide"></div>' +
+            '</div>' +
+            '<div class="modal-footer">' +
+            '<button type="button" class="btn btn-default" data-dismiss="modal">' + $('<div/>').text(closeLabel).html() + '</button>' +
+            '</div>' +
+            '</div></div></div>'
+        );
+
+        var $modal = $wrap.find('#siba-ai-call-guide-modal');
+        $modal.modal('show');
+
+        var $btn = $('.siba-lead-card[data-lead-id="' + leadId + '"] .siba-lead-card__ai-btn');
+        $btn.addClass('is-loading');
+
+        $.ajax({
+            type: 'post',
+            url: admin_url + 'siba_leads/ai_call_guide/' + leadId,
+            dataType: 'json',
+            timeout: 130000
+        }).done(function (res) {
+            console.log(res);
+            var $body = $modal.find('.siba-ai-call-guide-body');
+            $modal.find('.siba-ai-call-guide-loading').addClass('hide');
+            $body.removeClass('hide');
+            if (res && res.success && res.content) {
+                $body.text(res.content);
+            } else {
+                var msg = (res && res.message) ? res.message : (window.sibaLeadsAiCallGuideError || 'خطا در دریافت راهنما');
+                $body.text(msg);
+                if (typeof alert_float === 'function') {
+                    alert_float('warning', msg);
+                }
+            }
+        }).fail(function (xhr) {
+            var msg = window.sibaLeadsAiCallGuideError || 'خطا در دریافت راهنما';
+            if (xhr && xhr.status === 403) {
+                msg = window.sibaLeadsAiCallGuideDenied || msg;
+            }
+            $modal.find('.siba-ai-call-guide-loading').addClass('hide');
+            $modal.find('.siba-ai-call-guide-body').removeClass('hide').text(msg);
+            if (typeof alert_float === 'function') {
+                alert_float('danger', msg);
+            }
+        }).always(function () {
+            $btn.removeClass('is-loading');
+        });
     };
 
     window.siba_leads_add_fin_approve_req = function (id) {
