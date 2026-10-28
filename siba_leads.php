@@ -5,13 +5,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Siba Leads
 Description: Lead extensions without changing Perfex core.
-Version: 1.2.0
+Version: 1.2.1
 Requires at least: 3.0.*
 Author: Siba
 */
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
-define('SIBA_LEADS_VERSION', '1.2.0');
+define('SIBA_LEADS_VERSION', '1.2.1');
 hooks()->add_action('admin_init', 'siba_leads_sync_release_version', 99);
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
@@ -617,7 +617,7 @@ function siba_leads_ensure_setup_teams_menu($items)
 
 function siba_leads_load_admin_css()
 {
-    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.2.0-ai-call-guide') . '" rel="stylesheet" type="text/css">';
+    echo '<link href="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/css/style.css?v=1.2.1-job-subgroup') . '" rel="stylesheet" type="text/css">';
 }
 
 function siba_leads_load_admin_js()
@@ -689,6 +689,7 @@ function siba_leads_load_admin_js()
         function_exists('siba_leads_attribution_columns') ? siba_leads_attribution_columns() : [],
         JSON_UNESCAPED_UNICODE
     ) . ';</script>';
+    echo '<script>window.sibaLeadJobSubGroups = ' . json_encode(siba_leads_get_job_sub_groups(), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadJobGroups = ' . json_encode($jobGroups, JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadPositions = ' . json_encode($positions, JSON_UNESCAPED_UNICODE) . ';</script>';
     $defaultCountryId = function_exists('siba_leads_default_country_id') ? siba_leads_default_country_id() : 0;
@@ -731,7 +732,7 @@ function siba_leads_load_admin_js()
     echo '<script>window.sibaLeadsAiCallGuideClose = ' . json_encode(_l('close'), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsAiCallGuideError = ' . json_encode(_l('siba_leads_ai_call_guide_api_error'), JSON_UNESCAPED_UNICODE) . ';</script>';
     echo '<script>window.sibaLeadsAiCallGuideDenied = ' . json_encode(_l('siba_leads_ai_call_guide_denied'), JSON_UNESCAPED_UNICODE) . ';</script>';
-    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.2.0-ai-call-guide') . '"></script>';
+    echo '<script src="' . module_dir_url(SIBA_LEADS_MODULE_NAME, 'assets/js/siba_leads.js?v=1.2.1-job-subgroup') . '"></script>';
 }
 
 function siba_leads_action_links($actions)

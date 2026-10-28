@@ -588,7 +588,7 @@ function siba_leads_ensure_lead_columns(): void
     }
 
     // Schema version: bump when additive lead columns are introduced (e.g. industry_plan).
-    $schemaVersion = 3;
+    $schemaVersion = 4;
     $currentVersion = (int) get_option('siba_leads_schema_version');
     if ($currentVersion >= $schemaVersion && get_option('siba_leads_columns_ready') === '1') {
         $done = true;

@@ -13,6 +13,7 @@ function siba_leads_profile_columns(): array
         'national_code' => "varchar(20) NULL DEFAULT ''",
         'phonenumber2'  => "varchar(50) NULL DEFAULT ''",
         'job_group_id'  => 'INT(11) NOT NULL DEFAULT 0',
+        'job_sub_group_id' => 'INT(11) NOT NULL DEFAULT 0',
         'position_id'   => 'INT(11) NOT NULL DEFAULT 0',
     ];
 }
@@ -37,6 +38,26 @@ function siba_leads_get_active_job_groups(): array
 /**
  * @return array<int, array<string, mixed>>
  */
+function siba_leads_get_job_sub_groups(): array
+{
+    static $rows = null;
+    if ($rows !== null) return $rows;
+    $CI = &get_instance(); $table = db_prefix().'siba_job_sub_groups';
+    if (!$CI->db->table_exists($table)) return $rows = [];
+    return $rows = $CI->db->select('siba_job_sub_group_id,siba_job_group_id,siba_job_sub_group_name,siba_job_sub_group_status')->order_by('siba_job_sub_group_name','ASC')->get($table)->result_array();
+}
+function siba_leads_job_sub_group_matches(int $id, int $group): bool
+{
+    if ($id < 1 || $group < 1) return false;
+    foreach (siba_leads_get_job_sub_groups() as $row) if ((int)$row['siba_job_sub_group_id']===$id) return (int)$row['siba_job_group_id']===$group;
+    return false;
+}
+function siba_leads_get_job_sub_group_name(int $id): string
+{
+    foreach (siba_leads_get_job_sub_groups() as $row) if ((int)$row['siba_job_sub_group_id']===$id) return (string)$row['siba_job_sub_group_name'];
+    return '';
+}
+
 function siba_leads_get_active_positions(): array
 {
     $CI    = &get_instance();
@@ -142,7 +163,10 @@ function siba_leads_resolve_lead_profile($lead): array
         $position_name = $title;
     }
 
+    $sub = (int)(is_array($lead) ? ($lead['job_sub_group_id'] ?? 0) : ($lead->job_sub_group_id ?? 0));
     return [
+        'job_sub_group_id' => $sub,
+        'job_sub_group_name' => $sub > 0 ? siba_leads_get_job_sub_group_name($sub) : '',
         'national_code'  => $national_code,
         'phonenumber2'   => $phonenumber2,
         'job_group_id'   => $job_group_id,
@@ -164,6 +188,10 @@ function siba_leads_sync_profile_fields(array $data): array
     $data['phonenumber2']  = trim((string) ($data['phonenumber2'] ?? ''));
     $data['job_group_id']  = (int) ($data['job_group_id'] ?? 0);
     $data['position_id']   = (int) ($data['position_id'] ?? 0);
+    if (array_key_exists('job_sub_group_id',$data)) {
+        $data['job_sub_group_id'] = max(0,(int)$data['job_sub_group_id']);
+        if ($data['job_sub_group_id'] > 0 && !siba_leads_job_sub_group_matches($data['job_sub_group_id'],$data['job_group_id'])) $data['job_sub_group_id'] = 0;
+    }
     $data['birth_date']    = trim((string) ($data['birth_date'] ?? ''));
 
     if ($data['birth_date'] === '0000-00-00' || $data['birth_date'] === '0000-00-00 00:00:00') {
@@ -256,6 +284,7 @@ function siba_leads_persist_profile_on_save($lead_id): void
         $update['phonenumber2'] = (string) ($data['phonenumber2'] ?? '');
     }
 
+    if (array_key_exists('job_sub_group_id',$data) && $CI->db->field_exists('job_sub_group_id',$leadsTable)) $update['job_sub_group_id'] = $data['job_sub_group_id'];
     $CI->db->where('id', $lead_id)->update($leadsTable, $update);
 }
 
@@ -309,7 +338,7 @@ function siba_leads_ensure_loaded(): void
  * - city_id
  * - job_group_id
  * - position_id (or legacy title)
- * - company (only when company_is_required option is on)
+ * - company, national_code, job_sub_group_id (financial completion only)
  *
  * @return array<string, array{label:string,type:string}>
  */
@@ -340,13 +369,15 @@ function siba_leads_order_required_field_defs(): array
             'label' => _l('siba_leads_job_group'),
             'type'  => 'id',
         ],
+        'job_sub_group_id' => ['label' => 'زیرگروه شغلی', 'type' => 'id'],
+        'national_code' => ['label' => _l('siba_leads_national_code'), 'type' => 'text'],
         'position_id' => [
             'label' => _l('siba_leads_position'),
             'type'  => 'position',
         ],
     ];
 
-    if (get_option('company_is_required') == 1) {
+    { // Financial completion always needs the company, independent of ordinary lead creation.
         $fields = array_merge([
             'company' => [
                 'label' => _l('lead_company'),
@@ -404,10 +435,13 @@ function siba_leads_lead_order_readiness($lead): array
         'province_id'  => $provinceId,
         'city_id'      => $cityId,
         'job_group_id' => (int) ($get('job_group_id') ?? 0),
+        'job_sub_group_id' => (int) ($get('job_sub_group_id') ?? 0),
+        'national_code' => trim((string)($get('national_code') ?? '')),
         'position_id'  => (int) ($get('position_id') ?? 0),
         'title'        => trim((string) ($get('title') ?? '')),
     ];
 
+    if ($values['job_sub_group_id'] > 0 && !siba_leads_job_sub_group_matches($values['job_sub_group_id'],$values['job_group_id'])) $values['job_sub_group_id'] = 0;
     $missing = [];
     foreach (siba_leads_order_required_field_defs() as $key => $def) {
         $type  = $def['type'];

@@ -2153,6 +2153,8 @@
         ensureViewField('phonenumber2', labels.phonenumber2, phone2, true);
         ensureViewField('birth_date', labels.birthDate, birthDate);
         ensureViewField('job_group', labels.jobGroup, jobGroupName);
+        var subgroupName = seed ? (seed.job_sub_group_name || '') : ($modal.find('#siba_lead_job_sub_group_id option:selected').text() || '');
+        ensureViewField('job_sub_group','زیرگروه شغلی',subgroupName);
     }
 
     function ensureLeadBirthDateField($form, seed) {
@@ -2272,6 +2274,7 @@
             initialValue: hasValue,
             initialValueType: valueType,
             calendarType: 'persian',
+            calendar: { persian: { leapYearMode: 'astronomical' } },
             autoClose: true,
             observer: false,
             persianDigit: false,
@@ -2357,6 +2360,19 @@
         });
         $jobGroupSelect.html(buildJobGroupOptions(seed ? seed.job_group_id : ''));
         $jobGroupWrap.append($jobGroupSelect);
+        var $subWrap = $('<div class="form-group siba-lead-profile-job-sub-group"></div>');
+        $subWrap.append($('<label>', {class:'control-label',for:'siba_lead_job_sub_group_id',text:'زیرگروه شغلی'}));
+        var $subSelect = $('<select>', {id:'siba_lead_job_sub_group_id',name:'job_sub_group_id',class:'form-control selectpicker','data-live-search':'true'});
+        $subWrap.append($subSelect);
+        function refreshSubgroups(preserve){
+            var group = String($jobGroupSelect.val() || ''), old = preserve || $subSelect.val() || '';
+            $subSelect.empty().append($('<option>', {value:'',text:group?'انتخاب زیرگروه شغلی':'ابتدا گروه شغلی را انتخاب کنید'}));
+            (window.sibaLeadJobSubGroups || []).forEach(function(row){if(String(row.siba_job_group_id)!==group)return;if(Number(row.siba_job_sub_group_status)!==1&&String(row.siba_job_sub_group_id)!==String(old))return;$subSelect.append($('<option>',{value:row.siba_job_sub_group_id,text:row.siba_job_sub_group_name}));});
+            if(old&&$subSelect.find('option').filter(function(){return this.value===String(old);}).length)$subSelect.val(String(old));
+            if($subSelect.parent().hasClass('bootstrap-select'))$subSelect.selectpicker('refresh');
+        }
+        refreshSubgroups(seed ? seed.job_sub_group_id : '');
+
 
         if ($companyGroup.length) {
             $nationalGroup.insertAfter($companyGroup);
@@ -2369,6 +2385,8 @@
                 .append($jobGroupWrap);
         }
 
+        $subWrap.insertAfter($jobGroupWrap);
+        mountLocationSelectpicker($subSelect);
         mountLocationSelectpicker($positionSelect);
         mountLocationSelectpicker($jobGroupSelect);
 
@@ -2377,9 +2395,11 @@
             updateLeadProfileView($modal);
         });
 
-        $jobGroupSelect.on('changed.bs.select.sibaProfile', function () {
+        $jobGroupSelect.on('changed.bs.select.sibaProfile change.sibaSubGroup', function () {
+            refreshSubgroups();
             updateLeadProfileView($modal);
         });
+        $subSelect.on('changed.bs.select.sibaProfile change.sibaProfile', function(){updateLeadProfileView($modal);});
 
         $nationalInput.on('input.sibaProfile change.sibaProfile', function () {
             updateLeadProfileView($modal);
@@ -2808,6 +2828,7 @@
         bindLeadPhoneUnique($modal);
         ensureLeadModalSelectsEnabled($modal);
         markLeadOrderRequiredFields($modal);
+        applyFinanceCompletionMode($modal);
         injectLeadPipelineSelect($modal);
         restrictLeadModalTagsToExisting($modal);
         updateLeadPipelineView($modal);
@@ -3413,6 +3434,14 @@
         }, 100);
     });
 
+    var financeCompletionLead = 0;
+    function applyFinanceCompletionMode($modal){
+        var $form=$modal.find('#lead_form'),action=$form.attr('action')||'',match=action.match(/\/leads\/lead\/(\d+)/),active=financeCompletionLead>0&&match&&Number(match[1])===financeCompletionLead;
+        $modal.toggleClass('siba-leads-finance-completion',!!active);
+        if(!active)return;
+        getOrderRequiredFields().forEach(function(name){var $field=$form.find('[name="'+name+'"]');if(!$field.length)return;if(name==='position_id'&&!$field.val()&&$form.find('[name="title"]').val())return;$field.prop('required',true);if($form.data('validator'))$field.rules('add',{required:true});});
+    }
+    $(document).on('hidden.bs.modal.sibaFinanceCompletion','#lead-modal',function(){financeCompletionLead=0;});
     window.siba_leads_prompt_complete_lead = function (leadId, message) {
         leadId = parseInt(leadId, 10) || 0;
         if (message) {
@@ -3423,6 +3452,7 @@
             }
         }
         if (leadId > 0 && typeof init_lead === 'function') {
+            financeCompletionLead = leadId;
             init_lead(leadId, true);
         }
     };
@@ -3447,6 +3477,7 @@
             var openLead = parseInt(params.get('open_lead') || '0', 10) || 0;
             var editMode = params.get('edit') === '1';
             if (openLead > 0 && typeof init_lead === 'function') {
+                if (editMode) financeCompletionLead = openLead; // Existing financial-completion redirect contract.
                 window.setTimeout(function () {
                     init_lead(openLead, editMode);
                 }, 400);
