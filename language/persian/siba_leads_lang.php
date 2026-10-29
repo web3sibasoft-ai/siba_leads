@@ -40,7 +40,15 @@ $lang['siba_leads_ai_call_guide_empty_response'] = 'پاسخ خالی از سر�
 $lang['siba_leads_ai_call_guide_curl_missing'] = 'افزونه cURL روی سرور فعال نیست.';
 $lang['siba_leads_ai_call_guide_denied'] = 'دسترسی به راهنمای تماس هوشمند ندارید.';
 $lang['siba_leads_ai_settings'] = 'تنظیمات دستیار هوشمند';
-$lang['siba_leads_ai_settings_desc'] = 'کلید و مدل OpenRouter برای راهنمای تماس هوشمند کانبان سیبا لیدز را از اینجا تنظیم کنید.';
+$lang['siba_leads_ai_settings_desc'] = 'تنظیمات هوش مصنوعی (Google Gemini / OpenRouter) و حالت اجرای مرورگر یا سرور برای راهنمای تماس سرنخ‌ها.';
+$lang['siba_leads_ai_settings_provider'] = 'سرویس‌دهنده هوش مصنوعی';
+$lang['siba_leads_ai_execution_mode'] = 'حالت اجرا';
+$lang['siba_leads_ai_settings_gemini_key'] = 'کلید API جمینای (Google Gemini API Key)';
+$lang['siba_leads_ai_settings_gemini_model'] = 'مدل Gemini';
+$lang['siba_leads_ai_settings_gemini_temperature'] = 'درجه حرارت خلاقیت (Temperature)';
+$lang['siba_leads_ai_settings_gemini_max_tokens'] = 'حداکثر طول خروجی (Max Output Tokens)';
+$lang['siba_leads_ai_call_guide_copy'] = 'کپی راهنما';
+$lang['siba_leads_ai_call_guide_copied'] = 'متن راهنمای تماس کپی شد.';
 $lang['siba_leads_ai_settings_api_key'] = 'کلید API اوپن‌روتر (OpenRouter)';
 $lang['siba_leads_ai_settings_api_key_help'] = 'برای حفظ کلید فعلی، فیلد را خالی بگذارید. فقط هنگام تعویض کلید، مقدار جدید را وارد کنید.';
 $lang['siba_leads_ai_settings_api_key_keep'] = 'خالی = حفظ کلید فعلی';

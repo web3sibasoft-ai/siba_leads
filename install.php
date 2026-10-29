@@ -98,3 +98,8 @@ if (function_exists('siba_leads_ensure_lead_columns')) {
 if (function_exists('siba_leads_ensure_failure_reasons_table')) {
     siba_leads_ensure_failure_reasons_table();
 }
+
+require_once __DIR__.'/helpers/siba_leads_sales_targets_helper.php';
+siba_leads_sales_targets_schema();
+
+require_once __DIR__.'/helpers/siba_leads_sales_access_helper.php';siba_leads_sales_access_schema();

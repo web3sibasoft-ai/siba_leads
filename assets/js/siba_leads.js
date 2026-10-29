@@ -560,37 +560,121 @@
         var $btn = $('.siba-lead-card[data-lead-id="' + leadId + '"] .siba-lead-card__ai-btn');
         $btn.addClass('is-loading');
 
+        var done = function () {
+            $btn.removeClass('is-loading');
+        };
+
+        var showContent = function (content) {
+            $modal.find('.siba-ai-call-guide-loading').addClass('hide');
+            $modal.find('.siba-ai-call-guide-body').removeClass('hide').text(content);
+        };
+
+        var showError = function (msg, level) {
+            msg = msg || window.sibaLeadsAiCallGuideError || 'خطا در دریافت راهنما';
+            showContent(msg);
+            if (typeof alert_float === 'function') {
+                alert_float(level || 'warning', msg);
+            }
+        };
+
+        // Browser execution mode: the endpoint only returns the prompt + provider
+        // credentials, the AI call itself must happen from the user's browser.
+        var callProvider = function (payload) {
+            var provider = payload.provider || 'gemini';
+            var requestUrl = payload.endpoint || '';
+            var headers = {};
+            var body;
+
+            if (provider === 'openrouter') {
+                headers.Authorization = 'Bearer ' + (payload.api_key || '');
+                headers['HTTP-Referer'] = window.location.origin;
+                headers['X-Title'] = 'Siba Leads AI Call Guide';
+                body = {
+                    model: payload.model,
+                    messages: [{ role: 'user', content: payload.prompt || '' }],
+                    reasoning: { enabled: true }
+                };
+            } else {
+                if (requestUrl.indexOf('key=') === -1) {
+                    requestUrl += (requestUrl.indexOf('?') === -1 ? '?' : '&')
+                        + 'key=' + encodeURIComponent(payload.api_key || '');
+                }
+                body = {
+                    contents: [{ parts: [{ text: payload.prompt || '' }] }],
+                    generationConfig: {
+                        temperature: payload.temperature,
+                        maxOutputTokens: payload.max_output_tokens
+                    }
+                };
+            }
+
+            $.ajax({
+                type: 'post',
+                url: requestUrl,
+                contentType: 'application/json',
+                dataType: 'json',
+                headers: headers,
+                data: JSON.stringify(body),
+                processData: false,
+                timeout: 300000
+            }).done(function (res) {
+                if (res && res.error) {
+                    showError(res.error.message || '');
+                    return;
+                }
+
+                var text = '';
+                if (provider === 'openrouter') {
+                    var choice = (res && res.choices && res.choices[0]) || null;
+                    text = (choice && choice.message && choice.message.content) || '';
+                } else {
+                    var parts = (res && res.candidates && res.candidates[0]
+                        && res.candidates[0].content && res.candidates[0].content.parts) || [];
+                    parts.forEach(function (part) {
+                        if (part && part.text && !part.thought) {
+                            text += (text !== '' ? '\n' : '') + part.text;
+                        }
+                    });
+                }
+
+                if (String(text).trim() === '') {
+                    showError(window.sibaLeadsAiCallGuideEmpty || window.sibaLeadsAiCallGuideError || '');
+                    return;
+                }
+
+                showContent(text);
+            }).fail(function (xhr) {
+                var msg = '';
+                if (xhr && xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error.message || '';
+                }
+                showError(msg, 'danger');
+            }).always(done);
+        };
+
         $.ajax({
             type: 'post',
             url: admin_url + 'siba_leads/ai_call_guide/' + leadId,
             dataType: 'json',
             timeout: 130000
         }).done(function (res) {
-            console.log(res);
-            var $body = $modal.find('.siba-ai-call-guide-body');
-            $modal.find('.siba-ai-call-guide-loading').addClass('hide');
-            $body.removeClass('hide');
+            if (res && res.success && res.async_browser) {
+                callProvider(res);
+                return;
+            }
+            done();
             if (res && res.success && res.content) {
-                $body.text(res.content);
+                showContent(res.content);
             } else {
-                var msg = (res && res.message) ? res.message : (window.sibaLeadsAiCallGuideError || 'خطا در دریافت راهنما');
-                $body.text(msg);
-                if (typeof alert_float === 'function') {
-                    alert_float('warning', msg);
-                }
+                showError((res && res.message) ? res.message : '');
             }
         }).fail(function (xhr) {
+            done();
             var msg = window.sibaLeadsAiCallGuideError || 'خطا در دریافت راهنما';
             if (xhr && xhr.status === 403) {
                 msg = window.sibaLeadsAiCallGuideDenied || msg;
             }
-            $modal.find('.siba-ai-call-guide-loading').addClass('hide');
-            $modal.find('.siba-ai-call-guide-body').removeClass('hide').text(msg);
-            if (typeof alert_float === 'function') {
-                alert_float('danger', msg);
-            }
-        }).always(function () {
-            $btn.removeClass('is-loading');
+            showError(msg, 'danger');
         });
     };
 

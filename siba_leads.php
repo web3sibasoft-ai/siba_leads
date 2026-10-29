@@ -5,13 +5,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Siba Leads
 Description: Lead extensions without changing Perfex core.
-Version: 1.2.1
+Version: 1.2.4
 Requires at least: 3.0.*
 Author: Siba
 */
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
-define('SIBA_LEADS_VERSION', '1.2.1');
+define('SIBA_LEADS_VERSION', '1.2.4');
 hooks()->add_action('admin_init', 'siba_leads_sync_release_version', 99);
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
@@ -778,3 +778,21 @@ function siba_leads_sync_release_version(): void
         add_option('siba_leads_openrouter_ssl_verify', '1');
     }
 }
+
+hooks()->add_action('admin_init',function(){if((string)get_option('siba_leads_targets_schema')!=='122'){require_once __DIR__.'/helpers/siba_leads_sales_targets_helper.php';siba_leads_sales_targets_schema();update_option('siba_leads_targets_schema','122');}},90);
+
+// This menu and its data access do not alter permissions on the Leads workspace or its older reports.
+hooks()->add_filter('sidebar_menu_items','siba_leads_personal_sales_menu',1100);
+function siba_leads_personal_sales_menu($items){
+    if(!is_array($items))return $items;
+    require_once __DIR__.'/helpers/siba_leads_sales_access_helper.php';$access=siba_leads_sales_access();
+    if(!$access['can_view'])return $items;
+    $child=['parent_slug'=>'leads','slug'=>'siba-sales-performance','name'=>$access['can_view_all']?'عملکرد تیم فروش':'عملکرد فروش من','href'=>admin_url('siba_leads/sales_targets'),'position'=>94,'icon'=>'','badge'=>[],'href_attributes'=>[]];
+    foreach($items as $key=>$item){if(($item['slug']??'')!=='leads')continue;
+        $children=$item['children']??[];foreach($children as $c)if(($c['slug']??'')==='siba-sales-performance')return $items;
+        $items[$key]['children'][]=$child;return $items;
+    }
+    $items['leads']=['slug'=>'leads','name'=>_l('siba_leads'),'href'=>'#','collapse'=>true,'position'=>30,'icon'=>'fa-solid fa-bullseye','badge'=>[],'children'=>[$child],'href_attributes'=>[]];
+    return $items;
+}
+hooks()->add_action('admin_init',function(){if((string)get_option('siba_leads_sales_access_schema')!=='124'){require_once __DIR__.'/helpers/siba_leads_sales_access_helper.php';siba_leads_sales_access_schema();update_option('siba_leads_sales_access_schema','124');}},89);

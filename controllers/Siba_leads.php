@@ -926,6 +926,47 @@ class Siba_leads extends AdminController
     /**
      * Aggregated lead reports (analysis / incoming / pipeline / conversion / speed / sources / failures / sales).
      */
+    public function sales_targets()
+    {
+        require_once __DIR__.'/../helpers/siba_leads_sales_targets_helper.php';
+        require_once __DIR__.'/../helpers/siba_leads_sales_access_helper.php';
+        siba_leads_sales_targets_schema();$access=siba_leads_sales_access();
+        if(!$access['can_view']){access_denied('siba_leads');return;}
+        $dept=siba_leads_sales_department();
+        try{$period=siba_leads_sales_month((string)($this->input->post('month')??$this->input->get('month')??''));}
+        catch(DomainException $e){set_alert('warning',$e->getMessage());redirect(admin_url('siba_leads/sales_targets'));return;}
+        if($this->input->method()==='post'){
+            if($this->input->post('intent')==='settings'){
+                if(!$access['can_configure']){access_denied('siba_leads');return;}
+                $selected=(int)$this->input->post('department');
+                if(!$this->db->where('departmentid',$selected)->count_all_results(db_prefix().'departments')){set_alert('warning','دپارتمان فروش را انتخاب کنید.');redirect(admin_url('siba_leads/sales_targets'));return;}
+                $ids=$this->input->post('supervisors');$ids=is_array($ids)?array_values(array_unique(array_map('intval',$ids))):[];
+                $valid=$ids?$this->db->select('staffid')->where('active',1)->where('is_not_staff',0)->where_in('staffid',$ids)->get(db_prefix().'staff')->result_array():[];
+                if(count($valid)!==count($ids)){set_alert('warning','سرپرست فروش را از همکاران فعال انتخاب کنید.');redirect(admin_url('siba_leads/sales_targets'));return;}
+                $this->db->trans_begin();update_option('siba_leads_sales_department',$selected);update_option('siba_leads_sales_supervisors',json_encode($ids));
+                if($this->db->trans_status()){$this->db->trans_commit();set_alert('success','تنظیمات گزارش فروش ذخیره شد.');}else{$this->db->trans_rollback();set_alert('danger','تنظیمات ذخیره نشد؛ دوباره تلاش کنید.');}
+                redirect(admin_url('siba_leads/sales_targets?month='.urlencode($period['month'])));return;
+            }
+            if(!$access['can_manage']){access_denied('siba_leads');return;}
+            $values=$this->input->post('targets');$values=is_array($values)?$values:[];$valid=[];
+            foreach(siba_leads_sales_staff($dept) as $staff){$id=(int)$staff['staffid'];if(!(int)$staff['active']||!array_key_exists($id,$values))continue;
+                $v=is_scalar($values[$id])?strtr((string)$values[$id],['۰'=>'0','۱'=>'1','۲'=>'2','۳'=>'3','۴'=>'4','۵'=>'5','۶'=>'6','۷'=>'7','۸'=>'8','۹'=>'9','٠'=>'0','١'=>'1','٢'=>'2','٣'=>'3','٤'=>'4','٥'=>'5','٦'=>'6','٧'=>'7','٨'=>'8','٩'=>'9',','=>'','٬'=>'',' '=>'']):'invalid';
+                if(!preg_match('/^\d{1,15}$/D',$v)){set_alert('warning','هدف فروش باید مبلغ صحیح و نامنفی به ریال باشد.');redirect(admin_url('siba_leads/sales_targets?month='.urlencode($period['month'])));return;}$valid[$id]=$v;
+            }
+            $this->db->trans_begin();
+            foreach($valid as $id=>$v)$this->db->query('INSERT INTO `'.db_prefix().'siba_leads_sales_targets` (staff_id,jalali_month,target_rial,updated_by,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE target_rial=VALUES(target_rial),updated_by=VALUES(updated_by),updated_at=VALUES(updated_at)',[$id,$period['month'],$v,(int)get_staff_user_id(),date('Y-m-d H:i:s')]);
+            if($this->db->trans_status()){$this->db->trans_commit();set_alert('success','هدف‌های فروش ذخیره شد.');}else{$this->db->trans_rollback();set_alert('danger','هدف‌ها ذخیره نشد؛ دوباره تلاش کنید.');}
+            redirect(admin_url('siba_leads/sales_targets?month='.urlencode($period['month'])));return;
+        }
+        $staff=siba_leads_sales_scope(siba_leads_sales_staff($dept),$access);
+        if(!$access['can_view_all']&&!$staff){$own=$this->db->select('staffid,firstname,lastname,active')->where('staffid',$access['staff_id'])->get(db_prefix().'staff')->row_array();if($own)$staff=[$own];}
+        $rows=siba_leads_sales_target_report($period,$staff);$summary=siba_leads_sales_summary($rows,$period);
+        $departments=$access['can_configure']?$this->db->order_by('name')->get(db_prefix().'departments')->result_array():[];
+        $choices=$access['can_configure']?$this->db->select('staffid,firstname,lastname')->where('active',1)->where('is_not_staff',0)->order_by('firstname')->get(db_prefix().'staff')->result_array():[];
+        $data=['title'=>$access['can_view_all']?'عملکرد تیم فروش':'عملکرد فروش من','period'=>$period,'rows'=>$rows,'summary'=>$summary,'chart'=>siba_leads_sales_chart($period,$summary),'departments'=>$departments,'department'=>$dept,'can_manage'=>$access['can_manage'],'access'=>$access,'supervisors'=>siba_leads_sales_supervisor_ids(),'supervisor_choices'=>$choices];
+        $this->load->view('siba_leads/reports/sales_targets',$data);
+    }
+
     public function reports()
     {
         close_setup_menu();

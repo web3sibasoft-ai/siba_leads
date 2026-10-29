@@ -100,7 +100,7 @@ $axisUrl = static function ($axisKey) use ($buildQuery, $baseUrl, $report) {
 };
 
 ?>
-<div id="wrapper" class="siba-leads-reports-page">
+<div id="wrapper" class="siba-leads-reports-page"><?php if(siba_leads_can_view_report('staff')): ?><div style="padding:16px 24px 0"><a class="btn btn-default" href="<?= admin_url('siba_leads/sales_targets') ?>">فروش کارشناسان و هدف ماهانه</a></div><?php endif; ?>
     <div class="content">
         <div class="row">
             <div class="col-md-12">
