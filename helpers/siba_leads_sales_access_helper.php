@@ -19,10 +19,12 @@ function siba_leads_sales_access_schema(): void {
 }
 function siba_leads_sales_access(int $staffId=0): array {
     $staffId=$staffId?:((int)get_staff_user_id());$CI=&get_instance();
+    // Option lookup may query the shared builder. Resolve it before adding staff conditions.
+    $department=siba_leads_sales_department();
     $s=$CI->db->select('staffid,admin,active,is_not_staff')->where('staffid',$staffId)->get(db_prefix().'staff')->row_array();
     $active=$s&&(int)$s['active']===1&&(int)$s['is_not_staff']===0;
     $supervisor=$active&&in_array($staffId,siba_leads_sales_supervisor_ids(),true);
-    $member=$active&&$CI->db->where('staffid',$staffId)->where('departmentid',siba_leads_sales_department())->count_all_results(db_prefix().'staff_departments')>0;
+    $member=$active&&$CI->db->where('staffid',$staffId)->where('departmentid',$department)->count_all_results(db_prefix().'staff_departments')>0;
     $admin=$active&&(int)$s['admin']===1;
     return ['staff_id'=>$staffId,'can_view'=>$member||$supervisor||$admin,'can_view_all'=>$supervisor,'can_manage'=>$supervisor,'can_configure'=>$admin];
 }

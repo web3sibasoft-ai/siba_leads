@@ -5,13 +5,13 @@ defined('BASEPATH') or exit('No direct script access allowed');
 /*
 Module Name: Siba Leads
 Description: Lead extensions without changing Perfex core.
-Version: 1.2.4
+Version: 1.2.5
 Requires at least: 3.0.*
 Author: Siba
 */
 
 define('SIBA_LEADS_MODULE_NAME', 'siba_leads');
-define('SIBA_LEADS_VERSION', '1.2.4');
+define('SIBA_LEADS_VERSION', '1.2.5');
 hooks()->add_action('admin_init', 'siba_leads_sync_release_version', 99);
 define('SIBA_LEADS_REPOSITORY', 'https://github.com/web3sibasoft-ai/siba-leads.git');
 // Temporary: show maintenance page on all admin leads pages. Set to false to restore.
